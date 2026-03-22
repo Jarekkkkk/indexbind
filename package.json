@@ -1,0 +1,20 @@
+{
+  "name": "inkdex",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "description": "Codename for a local-first document retrieval artifact library.",
+  "scripts": {
+    "build:native": "cargo build -p inkdex-node && node scripts/copy-native.mjs",
+    "build:native:release": "cargo build -p inkdex-node --release && node scripts/copy-native.mjs --release",
+    "build": "npm run build:native && tsc -p tsconfig.json",
+    "check": "tsc --noEmit -p tsconfig.json && cargo check --workspace",
+    "test": "cargo test --workspace"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "typescript": "^5.9.2"
+  }
+}

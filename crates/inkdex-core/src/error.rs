@@ -1,0 +1,19 @@
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum InkdexError {
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("sqlite error: {0}")]
+    Sqlite(#[from] rusqlite::Error),
+    #[error("json error: {0}")]
+    Json(#[from] serde_json::Error),
+    #[error("embedding error: {0}")]
+    Embedding(#[from] anyhow::Error),
+    #[error("artifact metadata missing: {0}")]
+    MissingMetadata(&'static str),
+    #[error("document not found at path: {0}")]
+    DocumentNotFound(String),
+}
+
+pub type Result<T> = std::result::Result<T, InkdexError>;

@@ -1,0 +1,15 @@
+mod artifact;
+mod chunking;
+mod embedding;
+mod error;
+mod retriever;
+mod types;
+
+pub use artifact::{build_artifact, BuildArtifactOptions, BuildStats};
+pub use embedding::EmbeddingBackend;
+pub use error::{InkdexError, Result};
+pub use retriever::{ArtifactInfo, Retriever, SearchOptions};
+pub use types::{
+    BestMatch, DocumentHit, LoadedDocument, NormalizedDocument, SourceRoot, StoredChunk,
+    StoredDocument,
+};

@@ -1,0 +1,204 @@
+use crate::chunking::{chunk_document, ChunkingOptions};
+use crate::embedding::{vector_to_bytes, Embedder, EmbeddingBackend};
+use crate::types::{NormalizedDocument, SourceRoot};
+use crate::{InkdexError, Result};
+use blake3::Hasher;
+use rusqlite::{params, Connection};
+use serde_json::json;
+use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+#[derive(Debug, Clone)]
+pub struct BuildArtifactOptions {
+    pub source_root: SourceRoot,
+    pub embedding_backend: EmbeddingBackend,
+    pub chunking: ChunkingOptions,
+}
+
+impl Default for BuildArtifactOptions {
+    fn default() -> Self {
+        Self {
+            source_root: SourceRoot {
+                id: "root".to_string(),
+                original_path: ".".to_string(),
+            },
+            embedding_backend: EmbeddingBackend::default(),
+            chunking: ChunkingOptions::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct BuildStats {
+    pub document_count: usize,
+    pub chunk_count: usize,
+}
+
+pub fn build_artifact(
+    output_path: &Path,
+    documents: &[NormalizedDocument],
+    options: &BuildArtifactOptions,
+) -> Result<BuildStats> {
+    let mut embedder = Embedder::new(options.embedding_backend.clone())?;
+    let connection = Connection::open(output_path)?;
+    initialize_schema(&connection)?;
+
+    let mut document_count = 0usize;
+    let mut chunk_count = 0usize;
+    let built_at = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| InkdexError::Embedding(error.into()))?
+        .as_secs()
+        .to_string();
+
+    connection.execute(
+        "INSERT INTO artifact_meta (key, value) VALUES (?1, ?2)",
+        params!["schema_version", "1"],
+    )?;
+    connection.execute(
+        "INSERT INTO artifact_meta (key, value) VALUES (?1, ?2)",
+        params!["built_at", built_at],
+    )?;
+    connection.execute(
+        "INSERT INTO artifact_meta (key, value) VALUES (?1, ?2)",
+        params!["source_root", serde_json::to_string(&options.source_root)?],
+    )?;
+    connection.execute(
+        "INSERT INTO artifact_meta (key, value) VALUES (?1, ?2)",
+        params![
+            "embedding_backend",
+            serde_json::to_string(embedder.backend())?
+        ],
+    )?;
+    connection.execute(
+        "INSERT INTO artifact_meta (key, value) VALUES (?1, ?2)",
+        params!["chunking", serde_json::to_string(&json!({
+            "target_tokens": options.chunking.target_tokens,
+            "overlap_tokens": options.chunking.overlap_tokens,
+        }))?],
+    )?;
+
+    let transaction = connection.unchecked_transaction()?;
+    for document in documents {
+        let doc_id = build_doc_id(&options.source_root.id, &document.relative_path);
+        let content_hash = blake3::hash(document.content.as_bytes()).to_hex().to_string();
+        let chunks = chunk_document(&doc_id, &document.content, &options.chunking);
+        let chunk_texts = chunks
+            .iter()
+            .map(|chunk| chunk.chunk_text.clone())
+            .collect::<Vec<_>>();
+        let embeddings = embedder.embed_passages(&chunk_texts)?;
+
+        transaction.execute(
+            "INSERT INTO documents (
+                doc_id, source_root_id, original_path, relative_path, title, content_hash,
+                modified_at, chunk_count, metadata_json
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL, ?7, ?8)",
+            params![
+                doc_id,
+                options.source_root.id,
+                document.original_path,
+                document.relative_path,
+                document.title,
+                content_hash,
+                chunks.len() as i64,
+                serde_json::to_string(&document.metadata)?,
+            ],
+        )?;
+
+        for (chunk, embedding) in chunks.iter().zip(embeddings.iter()) {
+            transaction.execute(
+                "INSERT INTO chunks (
+                    chunk_id, doc_id, ordinal, heading_path_json, char_start, char_end,
+                    token_count, chunk_text, excerpt
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                params![
+                    chunk.chunk_id,
+                    chunk.doc_id,
+                    chunk.ordinal as i64,
+                    serde_json::to_string(&chunk.heading_path)?,
+                    chunk.char_start as i64,
+                    chunk.char_end as i64,
+                    chunk.token_count as i64,
+                    chunk.chunk_text,
+                    chunk.excerpt,
+                ],
+            )?;
+            transaction.execute(
+                "INSERT INTO chunk_vectors (chunk_id, dimensions, vector_blob) VALUES (?1, ?2, ?3)",
+                params![
+                    chunk.chunk_id,
+                    embedding.len() as i64,
+                    vector_to_bytes(embedding),
+                ],
+            )?;
+            transaction.execute(
+                "INSERT INTO fts_chunks (chunk_id, doc_id, chunk_text, excerpt) VALUES (?1, ?2, ?3, ?4)",
+                params![chunk.chunk_id, chunk.doc_id, chunk.chunk_text, chunk.excerpt],
+            )?;
+        }
+
+        document_count += 1;
+        chunk_count += chunks.len();
+    }
+    transaction.commit()?;
+
+    Ok(BuildStats {
+        document_count,
+        chunk_count,
+    })
+}
+
+fn initialize_schema(connection: &Connection) -> Result<()> {
+    connection.execute_batch(
+        "
+        PRAGMA journal_mode = WAL;
+        CREATE TABLE artifact_meta (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+        CREATE TABLE documents (
+            doc_id TEXT PRIMARY KEY,
+            source_root_id TEXT NOT NULL,
+            original_path TEXT NOT NULL,
+            relative_path TEXT NOT NULL,
+            title TEXT,
+            content_hash TEXT NOT NULL,
+            modified_at INTEGER,
+            chunk_count INTEGER NOT NULL,
+            metadata_json TEXT NOT NULL
+        );
+        CREATE TABLE chunks (
+            chunk_id INTEGER PRIMARY KEY,
+            doc_id TEXT NOT NULL,
+            ordinal INTEGER NOT NULL,
+            heading_path_json TEXT NOT NULL,
+            char_start INTEGER NOT NULL,
+            char_end INTEGER NOT NULL,
+            token_count INTEGER NOT NULL,
+            chunk_text TEXT NOT NULL,
+            excerpt TEXT NOT NULL
+        );
+        CREATE TABLE chunk_vectors (
+            chunk_id INTEGER PRIMARY KEY,
+            dimensions INTEGER NOT NULL,
+            vector_blob BLOB NOT NULL
+        );
+        CREATE VIRTUAL TABLE fts_chunks USING fts5(
+            chunk_id UNINDEXED,
+            doc_id UNINDEXED,
+            chunk_text,
+            excerpt
+        );
+        ",
+    )?;
+    Ok(())
+}
+
+fn build_doc_id(source_root_id: &str, relative_path: &str) -> String {
+    let mut hasher = Hasher::new();
+    hasher.update(source_root_id.as_bytes());
+    hasher.update(b":");
+    hasher.update(relative_path.as_bytes());
+    hasher.finalize().to_hex().to_string()
+}
