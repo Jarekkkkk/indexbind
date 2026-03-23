@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Result};
 use indexbind_core::{
-    build_artifact, BuildArtifactOptions, BuildStats, NormalizedDocument, SourceRoot,
+    build_artifact, build_canonical_artifact, BuildArtifactOptions, BuildStats,
+    CanonicalBuildStats, NormalizedDocument, SourceRoot,
 };
 use std::collections::BTreeMap;
 use std::fs;
@@ -19,6 +20,20 @@ pub fn build_from_directory(
     };
     let documents = read_documents(&source_root)?;
     build_artifact(output, &documents, &options).map_err(Into::into)
+}
+
+pub fn build_canonical_from_directory(
+    input: &Path,
+    output_dir: &Path,
+    mut options: BuildArtifactOptions,
+) -> Result<CanonicalBuildStats> {
+    let source_root = input.canonicalize()?;
+    options.source_root = SourceRoot {
+        id: "root".to_string(),
+        original_path: source_root.display().to_string(),
+    };
+    let documents = read_documents(&source_root)?;
+    build_canonical_artifact(output_dir, &documents, &options).map_err(Into::into)
 }
 
 fn read_documents(root: &Path) -> Result<Vec<NormalizedDocument>> {

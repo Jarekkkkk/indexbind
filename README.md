@@ -82,6 +82,12 @@ Build an artifact from a local docs directory:
 cargo run -p indexbind-build -- build ./docs ./index.sqlite
 ```
 
+Build the canonical file-bundle artifact from a local docs directory:
+
+```bash
+cargo run -p indexbind-build -- build-bundle ./docs ./index.bundle
+```
+
 Inspect an existing artifact:
 
 ```bash

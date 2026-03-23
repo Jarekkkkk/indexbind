@@ -35,6 +35,7 @@
     "build:native": "cargo build -p indexbind-node && node scripts/copy-native.mjs",
     "build:native:release": "cargo build -p indexbind-node --release && node scripts/copy-native.mjs --release",
     "build": "npm run build:native && tsc -p tsconfig.json",
+    "build:bundle": "cargo run -p indexbind-build -- build-bundle",
     "inspect:artifact": "cargo run -p indexbind-build -- inspect",
     "benchmark:basic": "tmpdir=$(mktemp -d) && cargo run -p indexbind-build -- build fixtures/benchmark/basic/docs \"$tmpdir/basic.sqlite\" hashing && cargo run -p indexbind-build -- benchmark \"$tmpdir/basic.sqlite\" fixtures/benchmark/basic/queries.json",
     "check": "tsc --noEmit -p tsconfig.json && cargo check --workspace",

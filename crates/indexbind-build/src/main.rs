@@ -1,5 +1,5 @@
 use anyhow::{anyhow, bail, Result};
-use indexbind_build::build_from_directory;
+use indexbind_build::{build_canonical_from_directory, build_from_directory};
 use indexbind_core::{BuildArtifactOptions, EmbeddingBackend, Retriever, SearchOptions};
 use serde::Deserialize;
 use serde_json::json;
@@ -15,10 +15,40 @@ fn main() -> Result<()> {
 
     match command_or_input.as_str() {
         "build" => build_command(args.collect()),
+        "build-bundle" => build_bundle_command(args.collect()),
         "inspect" => inspect_command(args.collect()),
         "benchmark" => benchmark_command(args.collect()),
         input => build_command_with_input(input.to_string(), args.collect()),
     }
+}
+
+fn build_bundle_command(args: Vec<String>) -> Result<()> {
+    let mut args = args.into_iter();
+    let input = args.next().ok_or_else(|| anyhow!("{}", usage()))?;
+    let output = args.next().ok_or_else(|| anyhow!("{}", usage()))?;
+    let backend = match args.next().as_deref() {
+        Some("hashing") => EmbeddingBackend::Hashing { dimensions: 256 },
+        Some(model) => EmbeddingBackend::Model2Vec {
+            model: model.to_string(),
+            batch_size: 512,
+        },
+        None => EmbeddingBackend::default(),
+    };
+
+    let stats = build_canonical_from_directory(
+        &PathBuf::from(input),
+        &PathBuf::from(output),
+        BuildArtifactOptions {
+            embedding_backend: backend,
+            ..Default::default()
+        },
+    )?;
+
+    println!(
+        "built canonical artifact bundle with {} documents, {} chunks, and {}-dim vectors",
+        stats.document_count, stats.chunk_count, stats.vector_dimensions
+    );
+    Ok(())
 }
 
 fn build_command(args: Vec<String>) -> Result<()> {
@@ -136,5 +166,5 @@ struct BenchmarkQuery {
 }
 
 fn usage() -> &'static str {
-    "usage:\n  indexbind-build build <input-dir> <output-file> [hashing|<model-id>]\n  indexbind-build inspect <artifact-file>\n  indexbind-build benchmark <artifact-file> <queries-json>\n\nFor backward compatibility, `indexbind-build <input-dir> <output-file> [hashing|<model-id>]` still works."
+    "usage:\n  indexbind-build build <input-dir> <output-file> [hashing|<model-id>]\n  indexbind-build build-bundle <input-dir> <output-dir> [hashing|<model-id>]\n  indexbind-build inspect <artifact-file>\n  indexbind-build benchmark <artifact-file> <queries-json>\n\nFor backward compatibility, `indexbind-build <input-dir> <output-file> [hashing|<model-id>]` still works."
 }
