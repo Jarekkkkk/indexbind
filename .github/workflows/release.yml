@@ -58,7 +58,7 @@ jobs:
             runner: macos-latest
             binary_path: native/indexbind.darwin-arm64.node
           - target_key: darwin-x64
-            runner: macos-13
+            runner: macos-15-intel
             binary_path: native/indexbind.darwin-x64.node
           - target_key: linux-x64-gnu
             runner: ubuntu-24.04
