@@ -1,10 +1,15 @@
 {
   "name": "indexbind",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "description": "A local-first document retrieval artifact library.",
   "repository": {
     "type": "git",
@@ -14,6 +19,18 @@
   "bugs": {
     "url": "https://github.com/jolestar/indexbind/issues"
   },
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build:native": "cargo build -p indexbind-node && node scripts/copy-native.mjs",
     "build:native:release": "cargo build -p indexbind-node --release && node scripts/copy-native.mjs --release",
@@ -21,7 +38,11 @@
     "inspect:artifact": "cargo run -p indexbind-build -- inspect",
     "benchmark:basic": "tmpdir=$(mktemp -d) && cargo run -p indexbind-build -- build fixtures/benchmark/basic/docs \"$tmpdir/basic.sqlite\" hashing && cargo run -p indexbind-build -- benchmark \"$tmpdir/basic.sqlite\" fixtures/benchmark/basic/queries.json",
     "check": "tsc --noEmit -p tsconfig.json && cargo check --workspace",
-    "test": "cargo test --workspace"
+    "test": "cargo test --workspace",
+    "release:verify": "node scripts/verify-release.mjs",
+    "release:prepare-root": "node scripts/prepare-root-package.mjs",
+    "release:prepare-native": "node scripts/prepare-native-package.mjs",
+    "release:smoke-install": "node scripts/smoke-install.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.5.2",

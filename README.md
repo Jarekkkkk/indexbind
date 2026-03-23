@@ -2,6 +2,27 @@
 
 `indexbind` is a local-first document retrieval library.
 
+## Install
+
+Install the Node package:
+
+```bash
+npm install indexbind
+```
+
+Supported prebuilt targets in the initial release:
+
+- macOS arm64
+- macOS x64
+- Linux x64 (glibc)
+- Windows x64 (MSVC)
+
+If a prebuilt addon is unavailable for your platform, install from source in a Rust toolchain environment and run:
+
+```bash
+npm run build:native:release
+```
+
 The project goal is deliberately narrow:
 
 - take a fixed document collection as input
@@ -85,6 +106,15 @@ Current native loading behavior:
 - local development prefers `native/indexbind.<platform>.node`
 - packaged installs can fall back to platform packages such as `@indexbind/native-darwin-x64`
 - unsupported or missing native targets now return an explicit platform-specific error
+
+## Release Model
+
+The published npm release is split into:
+
+- `indexbind` for the TypeScript API and native loader
+- platform packages such as `@indexbind/native-darwin-x64` for prebuilt NAPI binaries
+
+This keeps installs small while preserving a source-build path for unsupported targets.
 
 ## Design Constraints
 

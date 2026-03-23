@@ -1,0 +1,226 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: Version to publish, without the leading v
+        required: true
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    outputs:
+      release_version: ${{ steps.version.outputs.release_version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve release version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "release_version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "release_version=${{ github.event.inputs.release_version }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify release version
+        run: npm run release:verify
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.release_version }}
+
+  build-native:
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target_key: darwin-arm64
+            runner: macos-latest
+            binary_path: native/indexbind.darwin-arm64.node
+          - target_key: darwin-x64
+            runner: macos-13
+            binary_path: native/indexbind.darwin-x64.node
+          - target_key: linux-x64-gnu
+            runner: ubuntu-24.04
+            binary_path: native/indexbind.linux-x64.node
+          - target_key: win32-x64-msvc
+            runner: windows-2022
+            binary_path: native/indexbind.win32-x64.node
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build native addon
+        run: npm run build:native:release
+
+      - name: Build TypeScript package
+        run: npx tsc -p tsconfig.json
+
+      - name: Prepare native package
+        run: npm run release:prepare-native -- ${{ matrix.target_key }}
+        env:
+          RELEASE_VERSION: ${{ needs.verify.outputs.release_version }}
+          NATIVE_BINARY: ${{ matrix.binary_path }}
+
+      - name: Prepare root package
+        run: npm run release:prepare-root
+        env:
+          RELEASE_VERSION: ${{ needs.verify.outputs.release_version }}
+
+      - name: Build smoke test artifact
+        run: cargo run -p indexbind-build -- build fixtures/benchmark/basic/docs ${{ runner.temp }}/indexbind-smoke.sqlite hashing
+
+      - name: Smoke test packaged install
+        run: npm run release:smoke-install
+        env:
+          ROOT_PACKAGE_DIR: ${{ github.workspace }}/release/npm/indexbind
+          NATIVE_PACKAGE_DIR: ${{ github.workspace }}/release/npm/indexbind__native-${{ matrix.target_key }}
+          ARTIFACT_PATH: ${{ runner.temp }}/indexbind-smoke.sqlite
+          EXPECTED_TOP_HIT: guides/rust.md
+
+      - name: Upload native package
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-dir-${{ matrix.target_key }}
+          path: release/npm/indexbind__native-${{ matrix.target_key }}
+
+      - name: Pack native tarball
+        run: |
+          mkdir -p release/tarballs
+          npm pack release/npm/indexbind__native-${{ matrix.target_key }} --pack-destination release/tarballs
+
+      - name: Upload native tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-tarball-${{ matrix.target_key }}
+          path: release/tarballs/*.tgz
+
+  package-root:
+    needs: verify
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build TypeScript package
+        run: npx tsc -p tsconfig.json
+
+      - name: Prepare root package
+        run: npm run release:prepare-root
+        env:
+          RELEASE_VERSION: ${{ needs.verify.outputs.release_version }}
+
+      - name: Upload root package
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-root-dir
+          path: release/npm/indexbind
+
+      - name: Pack root tarball
+        run: |
+          mkdir -p release/tarballs
+          npm pack release/npm/indexbind --pack-destination release/tarballs
+
+      - name: Upload root tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-root-tarball
+          path: release/tarballs/*.tgz
+
+  github-release:
+    needs:
+      - verify
+      - build-native
+      - package-root
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Download root tarball artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: npm-root-tarball
+          path: release/assets
+
+      - name: Download native tarball artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: native-tarball-*
+          path: release/assets
+          merge-multiple: true
+
+      - name: Generate checksums
+        shell: bash
+        run: |
+          cd release/assets
+          shopt -s nullglob
+          sha256sum *.tgz > SHA256SUMS.txt
+
+      - name: Generate release notes
+        run: |
+          cat > release-notes.md <<'EOF'
+          Release assets prepared and smoke-tested:
+          - indexbind@${{ needs.verify.outputs.release_version }}
+          - @indexbind/native-darwin-arm64@${{ needs.verify.outputs.release_version }}
+          - @indexbind/native-darwin-x64@${{ needs.verify.outputs.release_version }}
+          - @indexbind/native-linux-x64-gnu@${{ needs.verify.outputs.release_version }}
+          - @indexbind/native-win32-x64-msvc@${{ needs.verify.outputs.release_version }}
+          
+          This GitHub release contains the npm tarballs and SHA256 checksums.
+          Publish to npm separately after reviewing the assets.
+          EOF
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          body_path: release-notes.md
+          files: |
+            release/assets/*.tgz
+            release/assets/SHA256SUMS.txt
