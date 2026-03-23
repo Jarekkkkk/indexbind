@@ -63,9 +63,6 @@ jobs:
           - target_key: linux-x64-gnu
             runner: ubuntu-24.04
             binary_path: native/indexbind.linux-x64.node
-          - target_key: win32-x64-msvc
-            runner: windows-2022
-            binary_path: native/indexbind.win32-x64.node
     runs-on: ${{ matrix.runner }}
 
     steps:
@@ -210,7 +207,6 @@ jobs:
           - @indexbind/native-darwin-arm64@${{ needs.verify.outputs.release_version }}
           - @indexbind/native-darwin-x64@${{ needs.verify.outputs.release_version }}
           - @indexbind/native-linux-x64-gnu@${{ needs.verify.outputs.release_version }}
-          - @indexbind/native-win32-x64-msvc@${{ needs.verify.outputs.release_version }}
           
           This GitHub release contains the npm tarballs and SHA256 checksums.
           Publish to npm separately after reviewing the assets.

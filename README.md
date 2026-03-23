@@ -15,7 +15,8 @@ Supported prebuilt targets in the initial release:
 - macOS arm64
 - macOS x64
 - Linux x64 (glibc)
-- Windows x64 (MSVC)
+
+Windows native prebuilds are not included in the initial release. On Windows, use WSL with the Linux x64 package path for `v0.1.0`.
 
 If a prebuilt addon is unavailable for your platform, install from source in a Rust toolchain environment and run:
 

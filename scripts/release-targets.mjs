@@ -25,14 +25,6 @@ export const TARGETS = [
     os: 'linux',
     arch: 'x64',
   },
-  {
-    key: 'win32-x64-msvc',
-    packageName: '@indexbind/native-win32-x64-msvc',
-    artifactName: 'indexbind.win32-x64.node',
-    runner: 'windows-2022',
-    os: 'win32',
-    arch: 'x64',
-  },
 ];
 
 export const OPTIONAL_DEPENDENCIES = Object.fromEntries(

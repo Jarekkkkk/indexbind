@@ -16,7 +16,6 @@ const SUPPORTED_PREBUILT_TARGETS = new Map<string, string>([
   ['darwin-x64', '@indexbind/native-darwin-x64'],
   ['linux-x64', '@indexbind/native-linux-x64-gnu'],
   ['linux-arm64', '@indexbind/native-linux-arm64-gnu'],
-  ['win32-x64', '@indexbind/native-win32-x64-msvc'],
 ]);
 
 function resolveNativeModule(): NativeModule {
