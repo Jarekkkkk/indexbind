@@ -41,6 +41,9 @@ jobs:
       - name: Web bundle smoke test
         run: npm run smoke:web-bundle
 
+      - name: Web worker smoke test
+        run: npm run smoke:web-worker
+
       - name: Benchmark fixture
         run: npm run benchmark:basic
 
