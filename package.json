@@ -50,6 +50,7 @@
     "benchmark:basic": "tmpdir=$(mktemp -d) && cargo run -p indexbind-build -- build fixtures/benchmark/basic/docs \"$tmpdir/basic.sqlite\" hashing && cargo run -p indexbind-build -- benchmark \"$tmpdir/basic.sqlite\" fixtures/benchmark/basic/queries.json",
     "smoke:web-bundle": "node scripts/smoke-web-bundle.mjs",
     "smoke:web-worker": "node scripts/smoke-web-worker.mjs",
+    "smoke:web-browser": "node scripts/smoke-web-browser.mjs",
     "check": "tsc --noEmit -p tsconfig.json && cargo check --workspace",
     "test": "cargo test --workspace",
     "release:verify": "node scripts/verify-release.mjs",
@@ -59,6 +60,7 @@
     "release:publish:github": "node scripts/publish-from-github-release.mjs"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@types/node": "^24.5.2",
     "typescript": "^5.9.2"
   },
