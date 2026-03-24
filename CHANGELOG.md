@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1
+
+- Fixed published root npm package metadata to preserve runtime `dependencies`, including `@noble/hashes` for `indexbind/web` and `indexbind/cloudflare`.
+- Fixed CI and release workflows to install the wasm target and `wasm-bindgen-cli` before package builds.
+- Upgraded GitHub Actions workflow action versions to Node 24 compatible release lines.
+
 ## 0.2.0
 
 - Added canonical file-bundle build and runtime support for `indexbind/web`.
