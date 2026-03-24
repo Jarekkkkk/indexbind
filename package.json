@@ -1,6 +1,6 @@
 {
   "name": "indexbind",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -36,6 +36,7 @@
     "node": ">=20"
   },
   "files": [
+    "CHANGELOG.md",
     "dist",
     "dist/wasm",
     "README.md",
