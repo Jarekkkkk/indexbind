@@ -215,8 +215,24 @@ jobs:
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ needs.verify.outputs.release_version }}
           generate_release_notes: true
           body_path: release-notes.md
           files: |
             release/assets/*.tgz
             release/assets/SHA256SUMS.txt
+
+      - name: Setup Node for npm publish
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Publish npm packages with trusted publishing
+        env:
+          NPM_CONFIG_PROVENANCE: true
+        run: |
+          npm publish release/assets/indexbind-native-darwin-arm64-${{ needs.verify.outputs.release_version }}.tgz --access public
+          npm publish release/assets/indexbind-native-darwin-x64-${{ needs.verify.outputs.release_version }}.tgz --access public
+          npm publish release/assets/indexbind-native-linux-x64-gnu-${{ needs.verify.outputs.release_version }}.tgz --access public
+          npm publish release/assets/indexbind-${{ needs.verify.outputs.release_version }}.tgz --access public
