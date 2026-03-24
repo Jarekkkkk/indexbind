@@ -1,3 +1,4 @@
+use model2vec_rs::model::StaticModel;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -16,7 +17,29 @@ struct Manifest {
     chunk_count: usize,
     vector_dimensions: usize,
     chunking: Value,
+    #[serde(default)]
+    files: ManifestFiles,
     features: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct ManifestFiles {
+    model: Option<ModelFiles>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ModelFiles {
+    tokenizer: String,
+    config: String,
+    weights: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+enum EmbeddingBackend {
+    Model2Vec { model: String, batch_size: usize },
+    Hashing { dimensions: usize },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,7 +59,7 @@ struct DocumentRecord {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ChunkRecord {
-    chunk_id: i64,
+    chunk_id: f64,
     doc_id: String,
     ordinal: usize,
     heading_path: Vec<String>,
@@ -84,7 +107,7 @@ struct RerankerOptions {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct BestMatch {
-    chunk_id: i64,
+    chunk_id: f64,
     excerpt: String,
     heading_path: Vec<String>,
     char_start: usize,
@@ -121,6 +144,7 @@ pub struct WasmIndex {
     chunks: Vec<ChunkRecord>,
     vectors: Vec<Vec<f32>>,
     postings: Postings,
+    model2vec: Option<StaticModel>,
 }
 
 #[wasm_bindgen]
@@ -132,6 +156,9 @@ impl WasmIndex {
         chunks: JsValue,
         vectors: Vec<u8>,
         postings: JsValue,
+        tokenizer_bytes: Option<Vec<u8>>,
+        model_bytes: Option<Vec<u8>>,
+        config_bytes: Option<Vec<u8>>,
     ) -> Result<WasmIndex, JsValue> {
         let manifest: Manifest = serde_wasm_bindgen::from_value(manifest).map_err(to_js_error)?;
         let documents: Vec<DocumentRecord> =
@@ -145,6 +172,17 @@ impl WasmIndex {
             .cloned()
             .map(|document| (document.doc_id.clone(), document))
             .collect();
+        let embedding_backend: EmbeddingBackend = serde_json::from_value(manifest.embedding_backend.clone())
+            .map_err(to_js_error)?;
+        let model2vec = match embedding_backend {
+            EmbeddingBackend::Model2Vec { .. } => {
+                let tokenizer = tokenizer_bytes.ok_or_else(|| to_js_error("missing model tokenizer bytes"))?;
+                let model = model_bytes.ok_or_else(|| to_js_error("missing model weights bytes"))?;
+                let config = config_bytes.ok_or_else(|| to_js_error("missing model config bytes"))?;
+                Some(StaticModel::from_bytes(tokenizer, model, config, None).map_err(to_js_error)?)
+            }
+            EmbeddingBackend::Hashing { .. } => None,
+        };
         Ok(Self {
             manifest,
             documents,
@@ -152,6 +190,7 @@ impl WasmIndex {
             chunks,
             vectors: decoded_vectors,
             postings,
+            model2vec,
         })
     }
 
@@ -313,7 +352,7 @@ impl WasmIndex {
                     metadata: document.metadata.clone(),
                     score,
                     best_match: vector_best.or(lexical_best).unwrap_or(BestMatch {
-                        chunk_id: 0,
+                        chunk_id: 0.0,
                         excerpt: String::new(),
                         heading_path: Vec::new(),
                         char_start: 0,
@@ -352,8 +391,18 @@ impl WasmIndex {
     }
 
     fn embed_text(&self, input: &str) -> Result<Vec<f32>, String> {
-        let dimensions = extract_hashing_dimensions(&self.manifest.embedding_backend)?;
-        Ok(hashing_embedding(input, dimensions))
+        let embedding_backend: EmbeddingBackend =
+            serde_json::from_value(self.manifest.embedding_backend.clone()).map_err(|e| e.to_string())?;
+        match embedding_backend {
+            EmbeddingBackend::Hashing { dimensions } => Ok(hashing_embedding(input, dimensions)),
+            EmbeddingBackend::Model2Vec { .. } => {
+                let model = self
+                    .model2vec
+                    .as_ref()
+                    .ok_or_else(|| "model2vec runtime not initialized".to_string())?;
+                Ok(model.encode_single(input))
+            }
+        }
     }
 }
 
@@ -646,20 +695,6 @@ fn decode_vectors(bytes: &[u8], chunk_count: usize, dimensions: usize) -> Result
         vectors.push(vector);
     }
     Ok(vectors)
-}
-
-fn extract_hashing_dimensions(backend: &Value) -> Result<usize, String> {
-    if let Some(dimensions) = backend
-        .get("Hashing")
-        .and_then(|value| value.get("dimensions"))
-        .and_then(Value::as_u64)
-    {
-        return Ok(dimensions as usize);
-    }
-    if let Some(dimensions) = backend.get("dimensions").and_then(Value::as_u64) {
-        return Ok(dimensions as usize);
-    }
-    Err("wasm runtime only supports hashing embedding backend".to_string())
 }
 
 fn to_js_error(error: impl ToString) -> JsValue {

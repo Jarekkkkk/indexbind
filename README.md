@@ -141,10 +141,10 @@ const hits = await index.search('rust guide', {
 });
 ```
 
-Current limitation:
+Web runtime notes:
 
-- `indexbind/web` currently supports canonical bundles built with the `hashing` backend.
-- `model2vec` bundle querying in web runtimes is not implemented yet.
+- `indexbind/web` supports canonical bundles built with either `hashing` or `model2vec`.
+- `model2vec` bundles carry `model/tokenizer.json`, `model/config.json`, and `model/model.safetensors` inside the bundle so the wasm query runtime can embed queries without host filesystem access.
 
 Current native loading behavior:
 

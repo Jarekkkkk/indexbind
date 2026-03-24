@@ -67,6 +67,11 @@ interface CanonicalArtifactManifest {
     chunks: string;
     vectors: string;
     postings: string;
+    model?: {
+      tokenizer: string;
+      config: string;
+      weights: string;
+    };
   };
   features: string[];
 }
@@ -167,6 +172,13 @@ export class WebIndex {
     const chunks = await loadJson<CanonicalChunkRecord[]>(base, manifest.files.chunks);
     const postings = await loadJson<CanonicalPostings>(base, manifest.files.postings);
     const vectorsBuffer = await loadArrayBuffer(base, manifest.files.vectors);
+    const modelBuffers = manifest.files.model
+      ? await Promise.all([
+          loadArrayBuffer(base, manifest.files.model.tokenizer),
+          loadArrayBuffer(base, manifest.files.model.weights),
+          loadArrayBuffer(base, manifest.files.model.config),
+        ])
+      : undefined;
     const vectors = decodeVectors(vectorsBuffer, chunks.length, manifest.vectorDimensions);
     const wasmIndex = await maybeCreateWasmIndex(
       manifest,
@@ -174,6 +186,7 @@ export class WebIndex {
       chunks,
       vectorsBuffer,
       postings,
+      modelBuffers,
     );
     return new WebIndex(manifest, documents, chunks, vectors, postings, wasmIndex);
   }
@@ -346,6 +359,7 @@ async function maybeCreateWasmIndex(
   chunks: CanonicalChunkRecord[],
   vectorsBuffer: ArrayBuffer,
   postings: CanonicalPostings,
+  modelBuffers?: [ArrayBuffer, ArrayBuffer, ArrayBuffer],
 ): Promise<WasmSearchBackend | undefined> {
   try {
     if (!supportsWasmBackend(manifest.embeddingBackend)) {
@@ -361,6 +375,9 @@ async function maybeCreateWasmIndex(
         chunks: unknown,
         vectors: Uint8Array,
         postings: unknown,
+        tokenizerBytes?: Uint8Array,
+        modelBytes?: Uint8Array,
+        configBytes?: Uint8Array,
       ) => WasmSearchBackend;
     };
     const wasmBinary = await loadWasmBinary();
@@ -371,6 +388,9 @@ async function maybeCreateWasmIndex(
       chunks,
       new Uint8Array(vectorsBuffer),
       postings,
+      modelBuffers ? new Uint8Array(modelBuffers[0]) : undefined,
+      modelBuffers ? new Uint8Array(modelBuffers[1]) : undefined,
+      modelBuffers ? new Uint8Array(modelBuffers[2]) : undefined,
     );
   } catch {
     return undefined;
@@ -806,12 +826,11 @@ function extractHashingDimensions(backend: unknown): number {
 }
 
 function supportsWasmBackend(backend: unknown): boolean {
-  try {
-    extractHashingDimensions(backend);
-    return true;
-  } catch {
+  if (!backend || typeof backend !== 'object') {
     return false;
   }
+  const record = backend as Record<string, unknown>;
+  return 'Hashing' in record || 'dimensions' in record || 'Model2Vec' in record || 'model' in record;
 }
 
 function joinFilePath(base: string, fileName: string): string {

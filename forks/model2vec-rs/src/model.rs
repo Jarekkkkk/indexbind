@@ -22,6 +22,13 @@ pub struct StaticModel {
     unk_token_id: Option<usize>,
 }
 
+#[derive(Debug, Clone)]
+pub struct ModelFiles {
+    pub tokenizer: std::path::PathBuf,
+    pub model: std::path::PathBuf,
+    pub config: std::path::PathBuf,
+}
+
 impl StaticModel {
     /// Load a Model2Vec model directly from in-memory bytes.
     ///
@@ -56,51 +63,11 @@ impl StaticModel {
         normalize: Option<bool>,
         subfolder: Option<&str>,
     ) -> Result<Self> {
-        #[cfg(feature = "hf-hub")]
-        // If provided, set HF token for authenticated downloads
-        if let Some(tok) = token {
-            env::set_var("HF_HUB_TOKEN", tok);
-        }
-
-        #[cfg(not(feature = "hf-hub"))]
-        let _ = token;
-
-        // Locate tokenizer.json, model.safetensors, config.json
-        let (tok_path, mdl_path, cfg_path) = {
-            let base = repo_or_path.as_ref();
-            if base.exists() {
-                let folder = subfolder.map(|s| base.join(s)).unwrap_or_else(|| base.to_path_buf());
-                let t = folder.join("tokenizer.json");
-                let m = folder.join("model.safetensors");
-                let c = folder.join("config.json");
-                if !t.exists() || !m.exists() || !c.exists() {
-                    return Err(anyhow!("local path {folder:?} missing tokenizer / model / config"));
-                }
-                (t, m, c)
-            } else {
-                #[cfg(feature = "hf-hub")]
-                {
-                let api = Api::new().context("hf-hub API init failed")?;
-                let repo = api.model(repo_or_path.as_ref().to_string_lossy().into_owned());
-                let prefix = subfolder.map(|s| format!("{}/", s)).unwrap_or_default();
-                let t = repo.get(&format!("{prefix}tokenizer.json"))?;
-                let m = repo.get(&format!("{prefix}model.safetensors"))?;
-                let c = repo.get(&format!("{prefix}config.json"))?;
-                (t, m, c)
-                }
-                #[cfg(not(feature = "hf-hub"))]
-                {
-                    return Err(anyhow!(
-                        "remote model downloads are disabled; pass a local model directory"
-                    ));
-                }
-            }
-        };
-
-        let tokenizer =
-            Tokenizer::from_file(&tok_path).map_err(|e| anyhow!("failed to load tokenizer: {e}"))?;
-        let model_bytes = fs::read(&mdl_path).context("failed to read model.safetensors")?;
-        let config_bytes = fs::read(&cfg_path).context("failed to read config.json")?;
+        let files = resolve_model_files(repo_or_path, token, subfolder)?;
+        let tokenizer = Tokenizer::from_file(&files.tokenizer)
+            .map_err(|e| anyhow!("failed to load tokenizer: {e}"))?;
+        let model_bytes = fs::read(&files.model).context("failed to read model.safetensors")?;
+        let config_bytes = fs::read(&files.config).context("failed to read config.json")?;
         Self::from_loaded_parts(tokenizer, &model_bytes, &config_bytes, normalize)
     }
 
@@ -326,4 +293,55 @@ impl StaticModel {
             unk_token_id: Some(unk_token_id),
         })
     }
+}
+
+pub fn resolve_model_files<P: AsRef<Path>>(
+    repo_or_path: P,
+    token: Option<&str>,
+    subfolder: Option<&str>,
+) -> Result<ModelFiles> {
+    #[cfg(feature = "hf-hub")]
+    if let Some(tok) = token {
+        env::set_var("HF_HUB_TOKEN", tok);
+    }
+
+    #[cfg(not(feature = "hf-hub"))]
+    let _ = token;
+
+    let (tok_path, mdl_path, cfg_path) = {
+        let base = repo_or_path.as_ref();
+        if base.exists() {
+            let folder = subfolder.map(|s| base.join(s)).unwrap_or_else(|| base.to_path_buf());
+            let t = folder.join("tokenizer.json");
+            let m = folder.join("model.safetensors");
+            let c = folder.join("config.json");
+            if !t.exists() || !m.exists() || !c.exists() {
+                return Err(anyhow!("local path {folder:?} missing tokenizer / model / config"));
+            }
+            (t, m, c)
+        } else {
+            #[cfg(feature = "hf-hub")]
+            {
+                let api = Api::new().context("hf-hub API init failed")?;
+                let repo = api.model(repo_or_path.as_ref().to_string_lossy().into_owned());
+                let prefix = subfolder.map(|s| format!("{}/", s)).unwrap_or_default();
+                let t = repo.get(&format!("{prefix}tokenizer.json"))?;
+                let m = repo.get(&format!("{prefix}model.safetensors"))?;
+                let c = repo.get(&format!("{prefix}config.json"))?;
+                (t, m, c)
+            }
+            #[cfg(not(feature = "hf-hub"))]
+            {
+                return Err(anyhow!(
+                    "remote model downloads are disabled; pass a local model directory"
+                ));
+            }
+        }
+    };
+
+    Ok(ModelFiles {
+        tokenizer: tok_path,
+        model: mdl_path,
+        config: cfg_path,
+    })
 }

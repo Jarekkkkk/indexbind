@@ -938,6 +938,7 @@ name = "indexbind-wasm"
 version = "0.1.0"
 dependencies = [
  "blake3",
+ "model2vec-rs",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",

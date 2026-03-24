@@ -3,6 +3,7 @@ use crate::chunking::chunk_document;
 use crate::embedding::{format_chunk_for_embedding, vector_to_bytes, Embedder, EmbeddingBackend};
 use crate::types::{MetadataMap, NormalizedDocument};
 use crate::{IndexbindError, Result};
+use model2vec_rs::model::resolve_model_files;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
@@ -38,6 +39,16 @@ pub struct CanonicalArtifactFiles {
     pub chunks: String,
     pub vectors: String,
     pub postings: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<CanonicalModelFiles>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CanonicalModelFiles {
+    pub tokenizer: String,
+    pub config: String,
+    pub weights: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -166,6 +177,15 @@ pub fn build_canonical_artifact(
     } else {
         vectors.len() / 4 / canonical_chunks.len()
     };
+    let model_files = maybe_write_model_assets(output_dir, &options.embedding_backend)?;
+    let mut features = vec![
+        "vector-search".to_string(),
+        "lexical-postings".to_string(),
+        "retrieval-only-results".to_string(),
+    ];
+    if model_files.is_some() {
+        features.push("model2vec-query".to_string());
+    }
 
     let manifest = CanonicalArtifactManifest {
         schema_version: "1".to_string(),
@@ -184,12 +204,9 @@ pub fn build_canonical_artifact(
             chunks: "chunks.json".to_string(),
             vectors: "vectors.bin".to_string(),
             postings: "postings.json".to_string(),
+            model: model_files,
         },
-        features: vec![
-            "vector-search".to_string(),
-            "lexical-postings".to_string(),
-            "retrieval-only-results".to_string(),
-        ],
+        features,
     };
 
     fs::write(
@@ -215,6 +232,28 @@ pub fn build_canonical_artifact(
         chunk_count: manifest.chunk_count,
         vector_dimensions,
     })
+}
+
+fn maybe_write_model_assets(
+    output_dir: &Path,
+    embedding_backend: &EmbeddingBackend,
+) -> Result<Option<CanonicalModelFiles>> {
+    let EmbeddingBackend::Model2Vec { model, .. } = embedding_backend else {
+        return Ok(None);
+    };
+
+    let files = resolve_model_files(model, None, None)
+        .map_err(|error| IndexbindError::Embedding(error.into()))?;
+    let model_dir = output_dir.join("model");
+    fs::create_dir_all(&model_dir)?;
+    fs::copy(&files.tokenizer, model_dir.join("tokenizer.json"))?;
+    fs::copy(&files.config, model_dir.join("config.json"))?;
+    fs::copy(&files.model, model_dir.join("model.safetensors"))?;
+    Ok(Some(CanonicalModelFiles {
+        tokenizer: "model/tokenizer.json".to_string(),
+        config: "model/config.json".to_string(),
+        weights: "model/model.safetensors".to_string(),
+    }))
 }
 
 fn build_postings(chunks: &[CanonicalChunkRecord]) -> CanonicalPostings {
