@@ -140,6 +140,8 @@ interface WasmSearchBackend {
   search(query: string, options?: unknown): unknown;
 }
 
+type WasmRuntime = 'web' | 'bundler';
+
 export class WebIndex {
   readonly #manifest: CanonicalArtifactManifest;
   readonly #documents: CanonicalDocumentRecord[];
@@ -157,7 +159,7 @@ export class WebIndex {
     this.#wasmIndex = wasmIndex;
   }
 
-  static async open(base: string | URL): Promise<WebIndex> {
+  static async open(base: string | URL, wasmRuntime: WasmRuntime = 'web'): Promise<WebIndex> {
     const manifest = await loadJson<CanonicalArtifactManifest>(base, 'manifest.json');
     const documents = await loadJson<CanonicalDocumentRecord[]>(base, manifest.files.documents);
     const chunks = await loadJson<CanonicalChunkRecord[]>(base, manifest.files.chunks);
@@ -177,6 +179,7 @@ export class WebIndex {
       vectorsBuffer,
       postings,
       modelBuffers,
+      wasmRuntime,
     );
     return new WebIndex(manifest, documents, wasmIndex);
   }
@@ -201,7 +204,11 @@ export class WebIndex {
 }
 
 export async function openWebIndex(base: string | URL): Promise<WebIndex> {
-  return WebIndex.open(base);
+  return WebIndex.open(base, 'web');
+}
+
+export async function openCloudflareIndex(base: string | URL): Promise<WebIndex> {
+  return WebIndex.open(base, 'bundler');
 }
 
 async function createWasmIndex(
@@ -211,17 +218,49 @@ async function createWasmIndex(
   vectorsBuffer: ArrayBuffer,
   postings: CanonicalPostings,
   modelBuffers?: [ArrayBuffer, ArrayBuffer, ArrayBuffer],
+  wasmRuntime: WasmRuntime = 'web',
 ): Promise<WasmSearchBackend> {
   if (!supportsWasmBackend(manifest.embeddingBackend)) {
     throw new Error('unsupported embedding backend for web runtime');
   }
-  if (isCloudflareWorkerRuntime()) {
-    throw new Error(
-      'Cloudflare Workers are not supported yet: the current wasm runtime needs a static Worker wasm module import.',
-    );
-  }
 
   try {
+    if (wasmRuntime === 'bundler') {
+      const [wasmBindings, wasmBinaryModule] = await Promise.all([
+        import('./wasm/indexbind_wasm.js') as Promise<{
+          initSync: (module: WebAssembly.Module) => unknown;
+          WasmIndex: new (
+            manifest: unknown,
+            documents: unknown,
+            chunks: unknown,
+            vectors: Uint8Array,
+            postings: unknown,
+            tokenizerBytes?: Uint8Array,
+            modelBytes?: Uint8Array,
+            configBytes?: Uint8Array,
+          ) => WasmSearchBackend;
+        }>,
+        import('./wasm-bundler/indexbind_wasm_bg.wasm') as Promise<
+          WebAssembly.Module | { default: WebAssembly.Module }
+        >,
+      ]);
+      const compiledModule =
+        wasmBinaryModule instanceof WebAssembly.Module
+          ? wasmBinaryModule
+          : wasmBinaryModule.default;
+      wasmBindings.initSync({ module: compiledModule });
+      return new wasmBindings.WasmIndex(
+        manifest,
+        documents,
+        chunks,
+        new Uint8Array(vectorsBuffer),
+        postings,
+        modelBuffers ? new Uint8Array(modelBuffers[0]) : undefined,
+        modelBuffers ? new Uint8Array(modelBuffers[1]) : undefined,
+        modelBuffers ? new Uint8Array(modelBuffers[2]) : undefined,
+      );
+    }
+
     const wasmModuleUrl = new URL('./wasm/indexbind_wasm.js', import.meta.url).href;
     const wasmModule = (await import(wasmModuleUrl)) as {
       default: (input?: unknown) => Promise<void>;
@@ -666,10 +705,6 @@ function ensureTrailingSlash(value: string | URL, relativeTo?: string): string |
 
 function isNodeRuntime(): boolean {
   return typeof process !== 'undefined' && Boolean(process.versions?.node);
-}
-
-function isCloudflareWorkerRuntime(): boolean {
-  return !isNodeRuntime() && 'WebSocketPair' in globalThis;
 }
 
 function extractHashingDimensions(backend: unknown): number {

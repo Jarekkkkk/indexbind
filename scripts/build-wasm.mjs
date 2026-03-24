@@ -4,7 +4,8 @@ import { execFileSync } from 'node:child_process';
 
 const root = process.cwd();
 const wasmTarget = 'wasm32-unknown-unknown';
-const wasmOutDir = resolve(root, 'dist', 'wasm');
+const wasmWebOutDir = resolve(root, 'dist', 'wasm');
+const wasmBundlerOutDir = resolve(root, 'dist', 'wasm-bundler');
 const wasmArtifact = resolve(
   root,
   'target',
@@ -14,7 +15,8 @@ const wasmArtifact = resolve(
 );
 
 mkdirSync(dirname(wasmArtifact), { recursive: true });
-mkdirSync(wasmOutDir, { recursive: true });
+mkdirSync(wasmWebOutDir, { recursive: true });
+mkdirSync(wasmBundlerOutDir, { recursive: true });
 
 execFileSync(
   'cargo',
@@ -24,6 +26,12 @@ execFileSync(
 
 execFileSync(
   'wasm-bindgen',
-  ['--target', 'web', '--out-dir', wasmOutDir, wasmArtifact],
+  ['--target', 'web', '--out-dir', wasmWebOutDir, wasmArtifact],
+  { stdio: 'inherit' },
+);
+
+execFileSync(
+  'wasm-bindgen',
+  ['--target', 'bundler', '--out-dir', wasmBundlerOutDir, wasmArtifact],
   { stdio: 'inherit' },
 );

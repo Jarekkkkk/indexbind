@@ -20,6 +20,11 @@ const cases = [
     backendArg: 'hashing',
     bundleDir: path.join(tempDir, 'hashing.bundle'),
   },
+  {
+    name: 'model2vec',
+    backendArg: 'minishlab/potion-base-2M',
+    bundleDir: path.join(tempDir, 'model2vec.bundle'),
+  },
 ];
 
 for (const testCase of cases) {
@@ -132,7 +137,7 @@ function createWorkerFixture(repoRoot, tempRoot) {
   fs.mkdirSync(workerDir, { recursive: true });
 
   const relativeWebModule = path
-    .relative(workerDir, path.join(repoRoot, 'dist/web.js'))
+    .relative(workerDir, path.join(repoRoot, 'dist/cloudflare.js'))
     .replaceAll(path.sep, '/');
   const webModuleImport = relativeWebModule.startsWith('.')
     ? relativeWebModule
