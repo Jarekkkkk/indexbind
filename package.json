@@ -54,7 +54,7 @@
     "docs:dev": "npx --no-install mdorigin dev --root docs/site",
     "docs:index": "npx --no-install mdorigin build index --root docs/site",
     "docs:build:cloudflare": "npm run docs:index && npx --no-install mdorigin build cloudflare --root docs/site",
-    "docs:init:cloudflare": "npx --no-install mdorigin init cloudflare --dir . --name indexbind-docs --force",
+    "docs:init:cloudflare": "npx --no-install mdorigin init cloudflare --dir . --name indexbind --force",
     "docs:deploy": "npm run docs:build:cloudflare && npm run docs:init:cloudflare && wrangler deploy",
     "inspect:artifact": "cargo run -p indexbind-build -- inspect",
     "benchmark:basic": "tmpdir=$(mktemp -d) && cargo run -p indexbind-build -- build fixtures/benchmark/basic/docs \"$tmpdir/basic.sqlite\" hashing && cargo run -p indexbind-build -- benchmark \"$tmpdir/basic.sqlite\" fixtures/benchmark/basic/queries.json",
