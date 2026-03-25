@@ -1,14 +1,8 @@
 # indexbind
 
-`indexbind` is a local-first document retrieval library.
-
 `indexbind` builds retrieval artifacts offline, then opens them across Node, browsers, and Workers.
 
-The current architecture is documented in [docs/architecture/canonical-artifact-and-wasm.md](./docs/architecture/canonical-artifact-and-wasm.md).
-
-The documentation site lives under [docs/site](./docs/site) and can be previewed with `mdorigin`.
-
-Public docs: [indexbind.jolestar.workers.dev](https://indexbind.jolestar.workers.dev)
+Docs: [indexbind.jolestar.workers.dev](https://indexbind.jolestar.workers.dev)
 
 The release history is tracked in [CHANGELOG.md](./CHANGELOG.md).
 
@@ -70,7 +64,7 @@ The project scope is deliberately narrow:
 
 ## Documentation
 
-- [Documentation site source](./docs/site)
+- [Documentation site](https://indexbind.jolestar.workers.dev)
 - [Getting Started](./docs/site/guides/getting-started.md)
 - [Web and Cloudflare](./docs/site/guides/web-and-cloudflare.md)
 - [Canonical Bundles](./docs/site/concepts/canonical-bundles.md)
@@ -78,6 +72,7 @@ The project scope is deliberately narrow:
 - [API Reference](./docs/site/reference/api.md)
 - [CLI Reference](./docs/site/reference/cli.md)
 - [Architecture](./docs/site/concepts/canonical-artifact-and-wasm.md)
+- [Documentation site source](./docs/site)
 
 ## Name
 
