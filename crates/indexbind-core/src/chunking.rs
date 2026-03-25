@@ -1,3 +1,4 @@
+use crate::lexical::estimate_token_count;
 use crate::types::StoredChunk;
 
 #[derive(Debug, Clone)]
@@ -149,7 +150,7 @@ fn parse_heading(line: &str) -> Option<(usize, &str)> {
 }
 
 fn estimate_tokens(text: &str) -> usize {
-    text.split_whitespace().count().max(1)
+    estimate_token_count(text)
 }
 
 #[cfg(test)]
@@ -163,5 +164,21 @@ mod tests {
         assert_eq!(chunks.len(), 2);
         assert_eq!(chunks[0].heading_path, vec!["Intro"]);
         assert_eq!(chunks[1].heading_path, vec!["Intro", "Details"]);
+    }
+
+    #[test]
+    fn chunker_estimates_cjk_tokens_without_whitespace() {
+        let input = "# 中文\n模块化区块链\n\n## 细节\n调用层";
+        let chunks = chunk_document(
+            "doc-1",
+            input,
+            &ChunkingOptions {
+                target_tokens: 5,
+                overlap_tokens: 0,
+            },
+        );
+        assert_eq!(chunks.len(), 2);
+        assert_eq!(chunks[0].token_count, 5);
+        assert_eq!(chunks[1].token_count, 2);
     }
 }

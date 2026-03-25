@@ -2,6 +2,7 @@ use crate::embedding::{
     bytes_to_vector, cosine_similarity, format_document_for_reranking, format_query_for_embedding,
     Embedder, EmbeddingBackend,
 };
+use crate::lexical::{normalize_for_heuristic, tokenize};
 use crate::types::{BestMatch, DocumentHit, MetadataMap, SourceRoot, StoredChunk, StoredDocument};
 use crate::{IndexbindError, Result};
 use rusqlite::{params, Connection};
@@ -16,6 +17,7 @@ pub struct ArtifactInfo {
     pub schema_version: String,
     pub built_at: String,
     pub embedding_backend: EmbeddingBackend,
+    pub lexical_tokenizer: String,
     pub source_root: SourceRoot,
     pub document_count: usize,
     pub chunk_count: usize,
@@ -251,10 +253,12 @@ fn document_matches(document: &StoredDocument, options: &SearchOptions) -> bool 
         }
     }
 
-    options
-        .metadata
-        .iter()
-        .all(|(key, value)| document.metadata.get(key).is_some_and(|candidate| metadata_matches(candidate, value)))
+    options.metadata.iter().all(|(key, value)| {
+        document
+            .metadata
+            .get(key)
+            .is_some_and(|candidate| metadata_matches(candidate, value))
+    })
 }
 
 fn metadata_matches(candidate: &Value, filter: &Value) -> bool {
@@ -398,7 +402,7 @@ fn rerank_documents_with_heuristic(
 ) -> Vec<DocumentHit> {
     let candidate_limit = config.candidate_pool_size.max(top_k);
     let query_tokens = tokenize(query);
-    let normalized_query = normalize_text(query);
+    let normalized_query = normalize_for_heuristic(query);
     let mut reranked = hits
         .iter()
         .take(candidate_limit)
@@ -429,7 +433,7 @@ fn rerank_documents_with_embeddings(
 ) -> Result<Vec<DocumentHit>> {
     let candidate_limit = config.candidate_pool_size.max(top_k);
     let query_tokens = tokenize(query);
-    let normalized_query = normalize_text(query);
+    let normalized_query = normalize_for_heuristic(query);
     let mut inputs = Vec::with_capacity(candidate_limit + 1);
     inputs.push(format_query_for_embedding(query));
     inputs.extend(hits.iter().take(candidate_limit).map(|hit| {
@@ -479,10 +483,10 @@ fn score_document_heuristic(
 ) -> f32 {
     let title = hit.title.as_deref().unwrap_or_default();
     let heading = hit.best_match.heading_path.join(" ");
-    let title_norm = normalize_text(title);
-    let path_norm = normalize_text(&hit.relative_path);
-    let heading_norm = normalize_text(&heading);
-    let excerpt_norm = normalize_text(&hit.best_match.excerpt);
+    let title_norm = normalize_for_heuristic(title);
+    let path_norm = normalize_for_heuristic(&hit.relative_path);
+    let heading_norm = normalize_for_heuristic(&heading);
+    let excerpt_norm = normalize_for_heuristic(&hit.best_match.excerpt);
 
     let title_coverage = score_token_coverage(query_tokens, &title_norm);
     let heading_coverage = score_token_coverage(query_tokens, &heading_norm);
@@ -524,17 +528,6 @@ fn contains_phrase(haystack: &str, needle: &str, weight: f32) -> f32 {
     weight
 }
 
-fn normalize_text(input: &str) -> String {
-    input
-        .chars()
-        .map(|ch| if ch.is_alphanumeric() { ch } else { ' ' })
-        .collect::<String>()
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .to_lowercase()
-}
-
 fn load_info(connection: &Connection) -> Result<ArtifactInfo> {
     let mut statement = connection.prepare("SELECT key, value FROM artifact_meta")?;
     let mut rows = statement.query([])?;
@@ -556,6 +549,10 @@ fn load_info(connection: &Connection) -> Result<ArtifactInfo> {
             .get("embedding_backend")
             .ok_or(IndexbindError::MissingMetadata("embedding_backend"))?,
     )?;
+    let lexical_tokenizer = values
+        .get("lexical_tokenizer")
+        .cloned()
+        .unwrap_or_else(|| "alnum-lower-v1".to_string());
     let source_root = serde_json::from_str(
         values
             .get("source_root")
@@ -570,6 +567,7 @@ fn load_info(connection: &Connection) -> Result<ArtifactInfo> {
         schema_version,
         built_at,
         embedding_backend,
+        lexical_tokenizer,
         source_root,
         document_count,
         chunk_count,
@@ -646,14 +644,6 @@ fn load_chunks(connection: &Connection) -> Result<Vec<IndexedChunk>> {
     Ok(chunks)
 }
 
-fn tokenize(input: &str) -> Vec<String> {
-    input
-        .split(|ch: char| !ch.is_alphanumeric())
-        .filter(|segment| !segment.is_empty())
-        .map(|segment| segment.to_lowercase())
-        .collect()
-}
-
 fn build_fts_query(input: &str) -> Option<String> {
     let tokens = tokenize(input);
     if tokens.is_empty() {
@@ -672,6 +662,7 @@ mod tests {
     use crate::build::BuildArtifactOptions;
     use crate::embedding::{Embedder, EmbeddingBackend};
     use crate::types::{NormalizedDocument, SourceRoot};
+    use crate::LEXICAL_TOKENIZER_VERSION;
     use serde_json::Value;
     use std::collections::BTreeMap;
     use tempfile::tempdir;
@@ -716,7 +707,71 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].relative_path, "guide.md");
         assert_eq!(hits[0].canonical_url.as_deref(), Some("/docs/guide"));
-        assert_eq!(hits[0].summary.as_deref(), Some("Rust embeddings and retrieval"));
+        assert_eq!(
+            hits[0].summary.as_deref(),
+            Some("Rust embeddings and retrieval")
+        );
+    }
+
+    #[test]
+    fn chinese_lexical_queries_match_expected_document() {
+        let dir = tempdir().unwrap();
+        let source = dir.path().join("docs");
+        std::fs::create_dir_all(&source).unwrap();
+
+        let artifact = dir.path().join("index.sqlite");
+        build_artifact(
+            &artifact,
+            &[
+                NormalizedDocument {
+                    doc_id: Some("modular".to_string()),
+                    source_path: None,
+                    relative_path: "modular.md".to_string(),
+                    canonical_url: None,
+                    title: Some("模块化区块链".to_string()),
+                    summary: Some("模块化区块链与调用层设计".to_string()),
+                    content: "# 模块化区块链\n调用层与模块化区块链架构。".to_string(),
+                    metadata: BTreeMap::new(),
+                },
+                NormalizedDocument {
+                    doc_id: Some("other".to_string()),
+                    source_path: None,
+                    relative_path: "other.md".to_string(),
+                    canonical_url: None,
+                    title: Some("存档".to_string()),
+                    summary: Some("运维归档".to_string()),
+                    content: "# 存档\n基础设施与归档材料。".to_string(),
+                    metadata: BTreeMap::new(),
+                },
+            ],
+            &BuildArtifactOptions {
+                source_root: SourceRoot {
+                    id: "root".to_string(),
+                    original_path: source.display().to_string(),
+                },
+                embedding_backend: EmbeddingBackend::Hashing { dimensions: 128 },
+                chunking: Default::default(),
+            },
+        )
+        .unwrap();
+
+        let mut retriever = Retriever::open(&artifact).unwrap();
+        assert_eq!(
+            retriever.info().lexical_tokenizer,
+            LEXICAL_TOKENIZER_VERSION
+        );
+
+        let hits = retriever
+            .search("模块化区块链", SearchOptions::default())
+            .unwrap();
+        assert!(!hits.is_empty());
+        assert_eq!(hits[0].doc_id, "modular");
+
+        let mixed_hits = retriever
+            .search("调用层 Layer2", SearchOptions::default())
+            .unwrap();
+        assert!(!mixed_hits.is_empty());
+        assert_eq!(mixed_hits[0].doc_id, "modular");
     }
 
     #[test]

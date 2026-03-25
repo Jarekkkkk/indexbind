@@ -96,6 +96,7 @@ fn inspect_command(args: Vec<String>) -> Result<()> {
         "schemaVersion": info.schema_version,
         "builtAt": info.built_at,
         "embeddingBackend": info.embedding_backend,
+        "lexicalTokenizer": info.lexical_tokenizer,
         "sourceRoot": info.source_root,
         "documentCount": info.document_count,
         "chunkCount": info.chunk_count,
@@ -106,12 +107,12 @@ fn inspect_command(args: Vec<String>) -> Result<()> {
 
 fn benchmark_command(args: Vec<String>) -> Result<()> {
     let mut args = args.into_iter();
-    let artifact = args
-        .next()
-        .ok_or_else(|| anyhow!("usage: indexbind-build benchmark <artifact-file> <queries-json>"))?;
-    let queries_path = args
-        .next()
-        .ok_or_else(|| anyhow!("usage: indexbind-build benchmark <artifact-file> <queries-json>"))?;
+    let artifact = args.next().ok_or_else(|| {
+        anyhow!("usage: indexbind-build benchmark <artifact-file> <queries-json>")
+    })?;
+    let queries_path = args.next().ok_or_else(|| {
+        anyhow!("usage: indexbind-build benchmark <artifact-file> <queries-json>")
+    })?;
     let payload = fs::read_to_string(&queries_path)?;
     let fixture: BenchmarkFixture = serde_json::from_str(&payload)?;
     let mut retriever = Retriever::open(&PathBuf::from(artifact))?;
