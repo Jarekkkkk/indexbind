@@ -12,7 +12,7 @@ summary: Embedded retrieval artifacts for Node, browsers, and Workers.
 
 It builds an artifact offline, then opens that artifact locally in Node, browsers, Web Workers, or Cloudflare Workers.
 
-If you want to start with the shortest path, go to [Getting Started](./guides/getting-started.md). If you want to understand the architecture direction, read [Canonical Artifact and WASM](./concepts/canonical-artifact-and-wasm.md).
+If you want the shortest path, start with [Getting Started](./guides/getting-started.md). If you first need to decide whether `indexbind` is the right tool, read [Choosing indexbind](./guides/choosing-indexbind.md).
 
 ## Why It Exists
 
@@ -27,6 +27,16 @@ Most search infrastructure is designed around services, crawlers, or runtime-man
 
 That makes it a better fit for docs systems, local tools, static deployments, and products such as [`mdorigin`](https://mdorigin.jolestar.workers.dev), where embedded retrieval is part of a larger publishing flow.
 
+## Choose the Right Tool
+
+`indexbind` is a better fit when you need an embedded retrieval layer. It is not trying to be:
+
+- a hosted search service
+- a turnkey knowledge-base product
+- a static-site-only search widget
+
+If that decision is still unclear, go to [Choosing indexbind](./guides/choosing-indexbind.md).
+
 ## What It Does
 
 - builds deterministic retrieval artifacts from a document collection
@@ -37,7 +47,11 @@ That makes it a better fit for docs systems, local tools, static deployments, an
 
 ## Start Here
 
+Use the docs by task:
+
+- [Choosing indexbind](./guides/choosing-indexbind.md)
 - [Getting Started](./guides/getting-started.md)
+- [Search Quality Controls](./guides/search-quality-controls.md)
 - [Web and Cloudflare](./guides/web-and-cloudflare.md)
 - [API](./reference/api.md)
 - [CLI](./reference/cli.md)

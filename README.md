@@ -10,6 +10,17 @@ Docs: [indexbind.jolestar.workers.dev](https://indexbind.jolestar.workers.dev)
 
 The release history is tracked in [CHANGELOG.md](./CHANGELOG.md).
 
+## What indexbind is
+
+`indexbind` is an embedded retrieval library for fixed document sets.
+
+It is designed for products and workflows where:
+
+- the document collection is known at build time
+- retrieval should ship with the product or artifact
+- the same search model should work across Node, browsers, and Workers
+- you do not want to depend on a hosted search service at query time
+
 ## Design Constraints
 
 - local-first
@@ -66,10 +77,30 @@ The project scope is deliberately narrow:
 - ship search without depending on a hosted search service
 - reuse the same retrieval model across Node, browsers, and Workers
 
+## Not the Best Fit
+
+`indexbind` is usually not the right first choice when you want:
+
+- a hosted search service with dashboards, analytics, and server-side index management
+- a turnkey local knowledge-base product with its own end-user workflow
+- a static-site search tool where the main requirement is dropping in a prebuilt UI and search script
+
+## Positioning
+
+The easiest way to understand `indexbind` is by comparison:
+
+- `Pagefind` is optimized for static-site search as a packaged product. `indexbind` is a lower-level retrieval library you embed into your own site, app, CLI, or worker.
+- `qmd` is a local knowledge-base search product with its own indexing and workflow. `indexbind` is meant to be used as a retrieval engine inside another system.
+- `Meilisearch` is a hosted or self-hosted search service. `indexbind` avoids the service boundary by building an artifact offline and opening it locally at runtime.
+
+That makes `indexbind` a good fit for doc systems, local tools, publishing pipelines, and agent-facing products that want a reusable retrieval layer.
+
 ## Documentation
 
 - [Documentation site](https://indexbind.jolestar.workers.dev)
+- [Choosing indexbind](./docs/site/guides/choosing-indexbind.md)
 - [Getting Started](./docs/site/guides/getting-started.md)
+- [Search Quality Controls](./docs/site/guides/search-quality-controls.md)
 - [Web and Cloudflare](./docs/site/guides/web-and-cloudflare.md)
 - [Canonical Bundles](./docs/site/concepts/canonical-bundles.md)
 - [Runtime Model](./docs/site/concepts/runtime-model.md)

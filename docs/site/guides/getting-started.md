@@ -2,10 +2,18 @@
 title: Getting Started
 order: 10
 date: 2026-03-25
-summary: Install indexbind, build a native artifact or canonical bundle, and execute your first query.
+summary: Install indexbind, build a native artifact and canonical bundle, and run your first query end to end.
 ---
 
 # Getting Started
+
+This guide takes the shortest full path:
+
+1. install `indexbind`
+2. build a native SQLite artifact from a tiny docs folder
+3. query it from Node
+4. build a canonical bundle from the same documents
+5. query that bundle from the web runtime
 
 ## Install
 
@@ -25,6 +33,30 @@ If your platform does not have a prebuilt native addon, build the native package
 npm run build:native:release
 ```
 
+## Create a Tiny Document Set
+
+Create a minimal folder:
+
+```text
+docs/
+  rust.md
+  workers.md
+```
+
+Example content:
+
+```md
+# Rust Guide
+
+Rust retrieval guide for local search.
+```
+
+```md
+# Cloudflare Workers Guide
+
+Workers deployment notes for retrieval.
+```
+
 ## Build a Native SQLite Artifact
 
 For a local docs folder:
@@ -33,16 +65,40 @@ For a local docs folder:
 cargo run -p indexbind-build -- build ./docs ./index.sqlite
 ```
 
-Query it from Node:
+## Query It from Node
 
 ```ts
 import { openIndex } from 'indexbind';
 
 const index = await openIndex('./index.sqlite');
 const hits = await index.search('rust guide', {
-  reranker: { candidatePoolSize: 25 },
+  topK: 5,
+  hybrid: true,
+  reranker: {
+    kind: 'embedding-v1',
+    candidatePoolSize: 25,
+  },
 });
+
+console.log(hits[0]);
 ```
+
+You should see a hit shaped roughly like:
+
+```ts
+{
+  relativePath: 'rust.md',
+  title: 'Rust Guide',
+  score: 0.9,
+  bestMatch: {
+    excerpt: 'Rust retrieval guide for local search.',
+    ...
+  },
+  ...
+}
+```
+
+Use the native SQLite artifact when your runtime is Node and you want the simplest local setup.
 
 ## Build a Canonical Bundle
 
@@ -67,7 +123,7 @@ await buildCanonicalBundle('./index.bundle', [
     metadata: { lang: 'rust' },
   },
 ], {
-  embeddingBackend: 'hashing',
+  embeddingBackend: 'model2vec',
 });
 ```
 
@@ -81,6 +137,14 @@ const hits = await index.search('rust guide');
 ```
 
 `indexbind/web` requires wasm initialization to succeed. It does not silently fall back to a separate JS query engine.
+
+Use the canonical bundle when you want the same retrieval data to work in browsers, standard workers, or Cloudflare Workers.
+
+## Choose the Artifact
+
+- Use the native SQLite artifact for local Node retrieval.
+- Use the canonical bundle for browser and worker runtimes.
+- If your product spans both environments, build both from the same document set.
 
 ## Inspect and Benchmark
 
