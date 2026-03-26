@@ -1,6 +1,7 @@
 use crate::build::{build_chunk_id, build_doc_id, BuildArtifactOptions};
 use crate::chunking::chunk_document;
 use crate::embedding::{format_chunk_for_embedding, vector_to_bytes, Embedder, EmbeddingBackend};
+use crate::lexical::{tokenize, LEXICAL_TOKENIZER_VERSION};
 use crate::types::{MetadataMap, NormalizedDocument};
 use crate::{IndexbindError, Result};
 use model2vec_rs::model::resolve_model_files;
@@ -288,23 +289,18 @@ fn build_postings(chunks: &[CanonicalChunkRecord]) -> CanonicalPostings {
     };
 
     CanonicalPostings {
-        tokenizer: "alnum-lower-v1".to_string(),
+        tokenizer: LEXICAL_TOKENIZER_VERSION.to_string(),
         avg_chunk_length,
         document_frequency,
         postings,
     }
 }
-
-fn tokenize(input: &str) -> Vec<String> {
-    input
-        .split(|ch: char| !ch.is_alphanumeric())
-        .filter(|segment| !segment.is_empty())
-        .map(|segment| segment.to_lowercase())
-        .collect()
-}
 #[cfg(test)]
 mod tests {
-    use super::{build_canonical_artifact, CanonicalArtifactManifest, CanonicalChunkRecord, CanonicalDocumentRecord, CanonicalPostings};
+    use super::{
+        build_canonical_artifact, CanonicalArtifactManifest, CanonicalChunkRecord,
+        CanonicalDocumentRecord, CanonicalPostings,
+    };
     use crate::build::BuildArtifactOptions;
     use crate::embedding::EmbeddingBackend;
     use crate::types::{NormalizedDocument, SourceRoot};
@@ -364,6 +360,7 @@ mod tests {
         let postings: CanonicalPostings =
             serde_json::from_slice(&fs::read(output.join("postings.json")).unwrap()).unwrap();
         assert!(postings.postings.contains_key("rust"));
+        assert_eq!(postings.tokenizer, crate::LEXICAL_TOKENIZER_VERSION);
         assert_eq!(fs::read(output.join("vectors.bin")).unwrap().len(), 128 * 4);
     }
 }

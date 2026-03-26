@@ -92,6 +92,7 @@ export interface NativeArtifactInfo {
   schemaVersion: string;
   builtAt: string;
   embeddingBackend: string;
+  lexicalTokenizer: string;
   sourceRoot: string;
   documentCount: number;
   chunkCount: number;

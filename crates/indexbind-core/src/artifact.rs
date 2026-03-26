@@ -1,6 +1,7 @@
 use crate::build::{build_chunk_id, build_doc_id, BuildArtifactOptions, BuildStats};
 use crate::chunking::chunk_document;
 use crate::embedding::{format_chunk_for_embedding, vector_to_bytes, Embedder};
+use crate::lexical::{tokenize_for_storage, LEXICAL_TOKENIZER_VERSION};
 use crate::types::NormalizedDocument;
 use crate::{IndexbindError, Result};
 use rusqlite::{params, Connection};
@@ -43,6 +44,10 @@ pub fn build_artifact(
             "embedding_backend",
             serde_json::to_string(embedder.backend())?
         ],
+    )?;
+    connection.execute(
+        "INSERT INTO artifact_meta (key, value) VALUES (?1, ?2)",
+        params!["lexical_tokenizer", LEXICAL_TOKENIZER_VERSION],
     )?;
     connection.execute(
         "INSERT INTO artifact_meta (key, value) VALUES (?1, ?2)",
@@ -128,7 +133,12 @@ pub fn build_artifact(
             )?;
             transaction.execute(
                 "INSERT INTO fts_chunks (chunk_id, doc_id, chunk_text, excerpt) VALUES (?1, ?2, ?3, ?4)",
-                params![chunk.chunk_id, chunk.doc_id, chunk.chunk_text, chunk.excerpt],
+                params![
+                    chunk.chunk_id,
+                    chunk.doc_id,
+                    tokenize_for_storage(&chunk.chunk_text),
+                    tokenize_for_storage(&chunk.excerpt),
+                ],
             )?;
         }
 

@@ -1,6 +1,6 @@
 use indexbind_core::{
-    build_canonical_artifact, BuildArtifactOptions, CanonicalBuildStats, ChunkingOptions, DocumentHit,
-    EmbeddingBackend, NormalizedDocument, Retriever, SearchOptions, SourceRoot,
+    build_canonical_artifact, BuildArtifactOptions, CanonicalBuildStats, ChunkingOptions,
+    DocumentHit, EmbeddingBackend, NormalizedDocument, Retriever, SearchOptions, SourceRoot,
 };
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
@@ -57,6 +57,7 @@ pub struct NodeArtifactInfo {
     pub schema_version: String,
     pub built_at: String,
     pub embedding_backend: String,
+    pub lexical_tokenizer: String,
     pub source_root: String,
     pub document_count: u32,
     pub chunk_count: u32,
@@ -123,6 +124,7 @@ impl NativeIndex {
             schema_version: info.schema_version.clone(),
             built_at: info.built_at.clone(),
             embedding_backend,
+            lexical_tokenizer: info.lexical_tokenizer.clone(),
             source_root,
             document_count: info.document_count as u32,
             chunk_count: info.chunk_count as u32,
@@ -151,7 +153,9 @@ impl NativeIndex {
                 .map(|value| {
                     Ok(indexbind_core::RerankerOptions {
                         kind: match value.kind.as_deref() {
-                            Some("embedding-v1") | None => indexbind_core::RerankerKind::EmbeddingV1,
+                            Some("embedding-v1") | None => {
+                                indexbind_core::RerankerKind::EmbeddingV1
+                            }
                             Some("heuristic-v1") => indexbind_core::RerankerKind::HeuristicV1,
                             Some(other) => {
                                 return Err(Error::from_reason(format!(

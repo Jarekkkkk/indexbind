@@ -57,6 +57,7 @@ export interface ArtifactInfo {
   schemaVersion: string;
   builtAt: string;
   embeddingBackend: unknown;
+  lexicalTokenizer: string;
   sourceRoot: unknown;
   documentCount: number;
   chunkCount: number;
@@ -101,6 +102,7 @@ function mapArtifactInfo(info: NativeArtifactInfo): ArtifactInfo {
     schemaVersion: info.schemaVersion,
     builtAt: info.builtAt,
     embeddingBackend: JSON.parse(info.embeddingBackend),
+    lexicalTokenizer: info.lexicalTokenizer,
     sourceRoot: JSON.parse(info.sourceRoot),
     documentCount: info.documentCount,
     chunkCount: info.chunkCount,

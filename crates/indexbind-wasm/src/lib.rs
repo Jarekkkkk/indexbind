@@ -1,3 +1,4 @@
+use indexbind_core::{lexical_tokenize, normalize_for_heuristic as core_normalize_for_heuristic};
 use model2vec_rs::model::StaticModel;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -171,7 +172,8 @@ impl WasmIndex {
         let manifest: Manifest = serde_wasm_bindgen::from_value(manifest).map_err(to_js_error)?;
         let documents: Vec<DocumentRecord> =
             serde_wasm_bindgen::from_value(documents).map_err(to_js_error)?;
-        let chunks: Vec<ChunkRecord> = serde_wasm_bindgen::from_value(chunks).map_err(to_js_error)?;
+        let chunks: Vec<ChunkRecord> =
+            serde_wasm_bindgen::from_value(chunks).map_err(to_js_error)?;
         let postings: Postings = serde_wasm_bindgen::from_value(postings).map_err(to_js_error)?;
         let decoded_vectors = decode_vectors(&vectors, chunks.len(), manifest.vector_dimensions)
             .map_err(to_js_error)?;
@@ -180,13 +182,16 @@ impl WasmIndex {
             .cloned()
             .map(|document| (document.doc_id.clone(), document))
             .collect();
-        let embedding_backend: EmbeddingBackend = serde_json::from_value(manifest.embedding_backend.clone())
-            .map_err(to_js_error)?;
+        let embedding_backend: EmbeddingBackend =
+            serde_json::from_value(manifest.embedding_backend.clone()).map_err(to_js_error)?;
         let model2vec = match embedding_backend {
             EmbeddingBackend::Model2Vec { .. } => {
-                let tokenizer = tokenizer_bytes.ok_or_else(|| to_js_error("missing model tokenizer bytes"))?;
-                let model = model_bytes.ok_or_else(|| to_js_error("missing model weights bytes"))?;
-                let config = config_bytes.ok_or_else(|| to_js_error("missing model config bytes"))?;
+                let tokenizer =
+                    tokenizer_bytes.ok_or_else(|| to_js_error("missing model tokenizer bytes"))?;
+                let model =
+                    model_bytes.ok_or_else(|| to_js_error("missing model weights bytes"))?;
+                let config =
+                    config_bytes.ok_or_else(|| to_js_error("missing model config bytes"))?;
                 Some(StaticModel::from_bytes(tokenizer, model, config, None).map_err(to_js_error)?)
             }
             EmbeddingBackend::Hashing { .. } => None,
@@ -332,9 +337,10 @@ impl WasmIndex {
                 .document_frequency
                 .get(&token)
                 .unwrap_or(&postings.len());
-            let idf =
-                (1.0 + (chunk_count - document_frequency as f32 + 0.5) / (document_frequency as f32 + 0.5))
-                    .ln();
+            let idf = (1.0
+                + (chunk_count - document_frequency as f32 + 0.5)
+                    / (document_frequency as f32 + 0.5))
+                .ln();
             for posting in postings {
                 let chunk = &self.chunks[posting.chunk_index];
                 if !allowed_doc_ids.contains(&chunk.doc_id) {
@@ -364,7 +370,8 @@ impl WasmIndex {
         top_k: usize,
     ) -> Vec<DocumentHit> {
         const RRF_K: f32 = 60.0;
-        let mut fused: HashMap<String, (f32, Option<BestMatch>, Option<BestMatch>)> = HashMap::new();
+        let mut fused: HashMap<String, (f32, Option<BestMatch>, Option<BestMatch>)> =
+            HashMap::new();
 
         for (rank, entry) in vector_docs.iter().enumerate() {
             let score = 1.0 / (RRF_K + rank as f32 + 1.0);
@@ -424,7 +431,12 @@ impl WasmIndex {
         };
         let candidate_limit = reranker.candidate_pool_size.unwrap_or(50).max(top_k);
         if reranker.kind.as_deref() == Some("heuristic-v1") {
-            return Ok(rerank_documents_with_heuristic(query, &hits, candidate_limit, top_k));
+            return Ok(rerank_documents_with_heuristic(
+                query,
+                &hits,
+                candidate_limit,
+                top_k,
+            ));
         }
         rerank_documents_with_embeddings(query, &hits, candidate_limit, top_k, |input| {
             self.embed_text(&input)
@@ -437,7 +449,8 @@ impl WasmIndex {
 
     fn embed_text(&self, input: &str) -> Result<Vec<f32>, String> {
         let embedding_backend: EmbeddingBackend =
-            serde_json::from_value(self.manifest.embedding_backend.clone()).map_err(|e| e.to_string())?;
+            serde_json::from_value(self.manifest.embedding_backend.clone())
+                .map_err(|e| e.to_string())?;
         match embedding_backend {
             EmbeddingBackend::Hashing { dimensions } => Ok(hashing_embedding(input, dimensions)),
             EmbeddingBackend::Model2Vec { .. } => {
@@ -579,7 +592,11 @@ where
     Ok(reranked)
 }
 
-fn score_document_heuristic(hit: &DocumentHit, query_tokens: &[String], normalized_query: &str) -> f32 {
+fn score_document_heuristic(
+    hit: &DocumentHit,
+    query_tokens: &[String],
+    normalized_query: &str,
+) -> f32 {
     let title_norm = normalize_for_heuristic(hit.title.as_deref().unwrap_or_default());
     let path_norm = normalize_for_heuristic(&hit.relative_path);
     let heading_norm = normalize_for_heuristic(&hit.best_match.heading_path.join(" "));
@@ -621,22 +638,11 @@ fn contains_phrase(haystack: &str, needle: &str, weight: f32) -> f32 {
 }
 
 fn tokenize(input: &str) -> Vec<String> {
-    input
-        .split(|ch: char| !ch.is_alphanumeric())
-        .filter(|segment| !segment.is_empty())
-        .map(|segment| segment.to_lowercase())
-        .collect()
+    lexical_tokenize(input)
 }
 
 fn normalize_for_heuristic(input: &str) -> String {
-    input
-        .chars()
-        .map(|ch| if ch.is_alphanumeric() { ch } else { ' ' })
-        .collect::<String>()
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .to_lowercase()
+    core_normalize_for_heuristic(input)
 }
 
 fn format_query_for_embedding(query: &str) -> String {
@@ -666,7 +672,10 @@ fn format_document_for_reranking(
             .map(|(key, value)| format!("{key}={}", format_metadata_value(value)))
             .collect::<Vec<_>>()
             .join(", ");
-        lines.push(format!("metadata: {}", normalize_whitespace(&metadata_line)));
+        lines.push(format!(
+            "metadata: {}",
+            normalize_whitespace(&metadata_line)
+        ));
     }
     lines.push(format!("excerpt: {}", normalize_whitespace(excerpt)));
     lines.join("\n")
@@ -720,7 +729,11 @@ fn cosine_similarity(left: &[f32], right: &[f32]) -> f32 {
     dot / (left_norm.sqrt() * right_norm.sqrt())
 }
 
-fn decode_vectors(bytes: &[u8], chunk_count: usize, dimensions: usize) -> Result<Vec<Vec<f32>>, String> {
+fn decode_vectors(
+    bytes: &[u8],
+    chunk_count: usize,
+    dimensions: usize,
+) -> Result<Vec<Vec<f32>>, String> {
     let expected_len = chunk_count * dimensions * 4;
     if bytes.len() != expected_len {
         return Err(format!(
@@ -733,7 +746,12 @@ fn decode_vectors(bytes: &[u8], chunk_count: usize, dimensions: usize) -> Result
     for _ in 0..chunk_count {
         let mut vector = Vec::with_capacity(dimensions);
         for _ in 0..dimensions {
-            let bytes = [bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3]];
+            let bytes = [
+                bytes[offset],
+                bytes[offset + 1],
+                bytes[offset + 2],
+                bytes[offset + 3],
+            ];
             vector.push(f32::from_le_bytes(bytes));
             offset += 4;
         }

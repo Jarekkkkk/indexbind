@@ -567,21 +567,90 @@ function normalizeWhitespace(input: string): string {
 }
 
 function normalizeForHeuristic(input: string): string {
-  return input
-    .split('')
-    .map((ch) => (/[\p{L}\p{N}]/u.test(ch) ? ch : ' '))
+  return Array.from(input)
+    .map((ch) => (classifyChar(ch) ? ch.toLowerCase() : ' '))
     .join('')
     .split(/\s+/)
     .filter(Boolean)
-    .join(' ')
-    .toLowerCase();
+    .join(' ');
 }
 
 function tokenize(input: string): string[] {
-  return input
-    .split(/[^\p{L}\p{N}]+/u)
-    .filter(Boolean)
-    .map((segment) => segment.toLowerCase());
+  const tokens: string[] = [];
+  let current = '';
+  let currentClass: 'alnum' | 'cjk' | null = null;
+
+  const flush = () => {
+    if (!current) {
+      return;
+    }
+    if (currentClass === 'alnum') {
+      tokens.push(current.toLowerCase());
+    } else if (currentClass === 'cjk') {
+      pushCjkTokens(tokens, current);
+    }
+    current = '';
+  };
+
+  for (const ch of Array.from(input)) {
+    const nextClass = classifyChar(ch);
+    if (!nextClass) {
+      flush();
+      currentClass = null;
+      continue;
+    }
+    if (currentClass !== nextClass) {
+      flush();
+      currentClass = nextClass;
+    }
+    current += nextClass === 'alnum' ? ch.toLowerCase() : ch;
+  }
+
+  flush();
+  return tokens;
+}
+
+function pushCjkTokens(tokens: string[], input: string): void {
+  const chars = Array.from(input);
+  if (chars.length === 1) {
+    tokens.push(chars[0]);
+    return;
+  }
+  if (chars.length === 2) {
+    tokens.push(chars.join(''));
+    return;
+  }
+  for (let index = 0; index < chars.length - 1; index += 1) {
+    tokens.push(chars[index] + chars[index + 1]);
+  }
+}
+
+function classifyChar(ch: string): 'alnum' | 'cjk' | null {
+  if (isCjk(ch)) {
+    return 'cjk';
+  }
+  return /[\p{L}\p{N}]/u.test(ch) ? 'alnum' : null;
+}
+
+function isCjk(ch: string): boolean {
+  const codePoint = ch.codePointAt(0);
+  if (codePoint === undefined) {
+    return false;
+  }
+  return (
+    (codePoint >= 0x3400 && codePoint <= 0x4dbf) ||
+    (codePoint >= 0x4e00 && codePoint <= 0x9fff) ||
+    (codePoint >= 0xf900 && codePoint <= 0xfaff) ||
+    (codePoint >= 0x20000 && codePoint <= 0x2a6df) ||
+    (codePoint >= 0x2a700 && codePoint <= 0x2b73f) ||
+    (codePoint >= 0x2b740 && codePoint <= 0x2b81f) ||
+    (codePoint >= 0x2b820 && codePoint <= 0x2ceaf) ||
+    (codePoint >= 0x2ceb0 && codePoint <= 0x2ebef) ||
+    (codePoint >= 0x2ebf0 && codePoint <= 0x2ee5f) ||
+    (codePoint >= 0x30000 && codePoint <= 0x3134f) ||
+    (codePoint >= 0x31350 && codePoint <= 0x323af) ||
+    (codePoint >= 0x323b0 && codePoint <= 0x3347f)
+  );
 }
 
 async function hashingEmbedding(input: string, dimensions: number): Promise<Float32Array> {
