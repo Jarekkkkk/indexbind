@@ -52,6 +52,10 @@ Use `qmd` when you want an opinionated local knowledge-base search product.
 
 Use `indexbind` when you are building your own product and want an embeddable retrieval layer rather than a full end-user workflow.
 
+This difference also shows up in cost shape. `indexbind` can work well with a lighter embedding backend and let lexical retrieval, hybrid fusion, reranking, and product-specific ranking controls carry more of the relevance burden. On CPU-only machines, that can make local indexing far more practical than a stack that assumes heavier GGUF embedding models.
+
+That is not a claim that `indexbind` always has the strongest semantic model. It is a claim that the retrieval stack gives you more engineering room to balance quality, startup cost, index build time, and runtime footprint.
+
 ### `indexbind` vs `Meilisearch`
 
 Use `Meilisearch` when you want a service boundary, server-managed indexes, and service-style deployment.
