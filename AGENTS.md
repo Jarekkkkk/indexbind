@@ -27,11 +27,12 @@
   - optional reranking exists
   - default reranker kind is `embedding-v1`
   - `heuristic-v1` remains available
-- Phase 4: partially implemented
+- Phase 4: mostly complete
   - native loader fallback/error handling improved
   - `inspect` CLI command exists
   - minimal benchmark fixtures exist
-  - prebuilt platform package publishing is not implemented yet
+  - incremental build cache and fresh export flow exist
+  - published prebuilt native packages exist for macOS arm64, macOS x64, and Linux x64 (glibc)
 
 ## Important Commands
 
@@ -64,7 +65,7 @@
 - `package.json` repository/homepage/bugs fields already point to `jolestar/indexbind`.
 - Native loader expects files/packages under `indexbind` names:
   - local dev file: `native/indexbind.<platform>.node`
-  - future prebuilt package pattern: `@indexbind/native-<platform>`
+  - prebuilt package pattern: `@indexbind/native-<platform>`
 
 ## Known Follow-up Work
 
@@ -73,8 +74,8 @@
   - open a new session from the new path
   - rebuild native output with `npm run build`
 - Finish Phase 4 publishing work:
-  - real prebuilt npm platform packages
   - install matrix validation on Linux/Windows/macOS
+  - widen prebuilt coverage, especially Windows and remaining Linux targets
   - publish-oriented README cleanup
   - package `exports/files` cleanup before release
 

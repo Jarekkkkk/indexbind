@@ -178,11 +178,32 @@ Phase 5 is complete when:
 
 - advanced features improve quality without distorting the core scope
 
+## Current Status
+
+Current state of the roadmap:
+
+- Phase 1: complete
+- Phase 2: complete
+- Phase 3: complete
+- Phase 4: mostly complete, with remaining packaging and adoption work
+- Phase 5: not started as a formal phase
+
+What is already in place:
+
+- stable document-first retrieval across Rust and Node
+- hybrid retrieval with local embeddings
+- optional reranking
+- programmatic build APIs
+- browser and Cloudflare Worker runtimes through canonical bundles
+- incremental build cache with fresh export
+- artifact inspection and benchmark fixtures
+- published native prebuilds for macOS arm64, macOS x64, and Linux x64 (glibc)
+
 ## Current Priority
 
-The next concrete priority should be:
+The next concrete priority is no longer retrieval-core catch-up. It is productization for third-party adoption:
 
-1. Replace the temporary hashing embedding backend with a real local embedding backend.
-2. Add explicit query/document embedding formatting.
-3. Upgrade the current retrieval path from simple weighted merge to a more principled hybrid fusion.
-4. Keep the document-first API unchanged while doing all of the above.
+1. finish the remaining packaging matrix work, especially Windows and install validation on mainstream platforms
+2. tighten public-contract messaging across README, docs, and roadmap so supported paths are obvious
+3. expand benchmark and example coverage so external users can judge build cost, artifact size, and runtime tradeoffs
+4. keep advanced retrieval features such as query normalization optional and host-defined

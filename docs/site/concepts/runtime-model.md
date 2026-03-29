@@ -39,7 +39,7 @@ Instead, the application takes the hit metadata and decides how to render, fetch
 - `indexbind`
   native SQLite query runtime for Node
 - `indexbind/build`
-  Node build API for canonical bundles
+  Node build APIs for canonical bundles and incremental cache export
 - `indexbind/web`
   wasm-backed canonical bundle runtime for browsers and standard workers
 - `indexbind/cloudflare`
