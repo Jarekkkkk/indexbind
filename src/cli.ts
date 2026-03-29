@@ -86,7 +86,6 @@ async function buildBundleCommand(args: string[]): Promise<void> {
 
 async function updateCacheCommand(args: string[]): Promise<void> {
   const positional: string[] = [];
-  let backend: string | undefined;
   let useGitDiff = false;
   let gitBase: string | undefined;
 
@@ -105,14 +104,17 @@ async function updateCacheCommand(args: string[]): Promise<void> {
       index += 1;
       continue;
     }
-    if (value === 'hashing' || (!value.startsWith('--') && positional.length >= 2)) {
-      backend = value;
-      continue;
+    if (value.startsWith('--')) {
+      throw new Error(usage());
     }
     positional.push(value);
   }
 
-  const [inputDir, cachePath] = positional;
+  if (positional.length < 2 || positional.length > 3) {
+    throw new Error(usage());
+  }
+
+  const [inputDir, cachePath, backend] = positional;
   if (!inputDir || !cachePath) {
     throw new Error(usage());
   }
