@@ -1,0 +1,32 @@
+[
+  {
+    "docId": "383dde8c50270901e5a343014571e012fdeeba678f6c143bb81aa00d2625f3b0",
+    "relativePath": "guides/python.md",
+    "canonicalUrl": null,
+    "title": "Python Packaging",
+    "summary": null,
+    "metadata": {},
+    "firstChunkIndex": 0,
+    "chunkCount": 2
+  },
+  {
+    "docId": "80b23985b371c7aad50b284f6ada7afae1648c07008f93e1ccc79b74263f1390",
+    "relativePath": "guides/rust.md",
+    "canonicalUrl": null,
+    "title": "Rust Guide",
+    "summary": null,
+    "metadata": {},
+    "firstChunkIndex": 2,
+    "chunkCount": 2
+  },
+  {
+    "docId": "94e2287982c511631ea4e29696b4fc78b04a3ab1652badd61897700b2fcc9f9e",
+    "relativePath": "ops/network.md",
+    "canonicalUrl": null,
+    "title": "Network Notes",
+    "summary": null,
+    "metadata": {},
+    "firstChunkIndex": 4,
+    "chunkCount": 2
+  }
+]

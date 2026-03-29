@@ -1,0 +1,429 @@
+{
+  "tokenizer": "mixed-cjk-bigram-v2",
+  "avgChunkLength": 14.666667,
+  "documentFrequency": {
+    "about": 2,
+    "and": 5,
+    "budgeting": 1,
+    "debugging": 2,
+    "document": 6,
+    "environment": 1,
+    "environments": 2,
+    "explains": 4,
+    "first": 2,
+    "guide": 1,
+    "how": 2,
+    "installation": 3,
+    "is": 2,
+    "language": 2,
+    "latency": 1,
+    "local": 2,
+    "network": 2,
+    "package": 2,
+    "packet": 1,
+    "pip": 2,
+    "project": 2,
+    "python": 1,
+    "quickstart": 1,
+    "rather": 2,
+    "run": 2,
+    "rust": 2,
+    "setup": 5,
+    "than": 2,
+    "the": 2,
+    "this": 6,
+    "to": 2,
+    "toolchain": 2,
+    "traces": 1,
+    "virtual": 2,
+    "workflows": 2
+  },
+  "postings": {
+    "about": [
+      {
+        "chunkIndex": 4,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 5,
+        "termFrequency": 1
+      }
+    ],
+    "and": [
+      {
+        "chunkIndex": 0,
+        "termFrequency": 2
+      },
+      {
+        "chunkIndex": 1,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 2,
+        "termFrequency": 2
+      },
+      {
+        "chunkIndex": 3,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 4,
+        "termFrequency": 1
+      }
+    ],
+    "budgeting": [
+      {
+        "chunkIndex": 4,
+        "termFrequency": 1
+      }
+    ],
+    "debugging": [
+      {
+        "chunkIndex": 4,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 5,
+        "termFrequency": 1
+      }
+    ],
+    "document": [
+      {
+        "chunkIndex": 0,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 1,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 2,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 3,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 4,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 5,
+        "termFrequency": 1
+      }
+    ],
+    "environment": [
+      {
+        "chunkIndex": 0,
+        "termFrequency": 1
+      }
+    ],
+    "environments": [
+      {
+        "chunkIndex": 0,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 1,
+        "termFrequency": 1
+      }
+    ],
+    "explains": [
+      {
+        "chunkIndex": 0,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 1,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 2,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 3,
+        "termFrequency": 1
+      }
+    ],
+    "first": [
+      {
+        "chunkIndex": 2,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 3,
+        "termFrequency": 1
+      }
+    ],
+    "guide": [
+      {
+        "chunkIndex": 2,
+        "termFrequency": 1
+      }
+    ],
+    "how": [
+      {
+        "chunkIndex": 2,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 3,
+        "termFrequency": 1
+      }
+    ],
+    "installation": [
+      {
+        "chunkIndex": 0,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 2,
+        "termFrequency": 2
+      },
+      {
+        "chunkIndex": 3,
+        "termFrequency": 1
+      }
+    ],
+    "is": [
+      {
+        "chunkIndex": 4,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 5,
+        "termFrequency": 1
+      }
+    ],
+    "language": [
+      {
+        "chunkIndex": 4,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 5,
+        "termFrequency": 1
+      }
+    ],
+    "latency": [
+      {
+        "chunkIndex": 4,
+        "termFrequency": 1
+      }
+    ],
+    "local": [
+      {
+        "chunkIndex": 0,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 1,
+        "termFrequency": 1
+      }
+    ],
+    "network": [
+      {
+        "chunkIndex": 4,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 5,
+        "termFrequency": 1
+      }
+    ],
+    "package": [
+      {
+        "chunkIndex": 0,
+        "termFrequency": 2
+      },
+      {
+        "chunkIndex": 1,
+        "termFrequency": 1
+      }
+    ],
+    "packet": [
+      {
+        "chunkIndex": 4,
+        "termFrequency": 1
+      }
+    ],
+    "pip": [
+      {
+        "chunkIndex": 0,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 1,
+        "termFrequency": 1
+      }
+    ],
+    "project": [
+      {
+        "chunkIndex": 2,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 3,
+        "termFrequency": 1
+      }
+    ],
+    "python": [
+      {
+        "chunkIndex": 0,
+        "termFrequency": 1
+      }
+    ],
+    "quickstart": [
+      {
+        "chunkIndex": 2,
+        "termFrequency": 1
+      }
+    ],
+    "rather": [
+      {
+        "chunkIndex": 4,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 5,
+        "termFrequency": 1
+      }
+    ],
+    "run": [
+      {
+        "chunkIndex": 2,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 3,
+        "termFrequency": 1
+      }
+    ],
+    "rust": [
+      {
+        "chunkIndex": 2,
+        "termFrequency": 3
+      },
+      {
+        "chunkIndex": 3,
+        "termFrequency": 2
+      }
+    ],
+    "setup": [
+      {
+        "chunkIndex": 0,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 2,
+        "termFrequency": 2
+      },
+      {
+        "chunkIndex": 3,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 4,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 5,
+        "termFrequency": 1
+      }
+    ],
+    "than": [
+      {
+        "chunkIndex": 4,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 5,
+        "termFrequency": 1
+      }
+    ],
+    "the": [
+      {
+        "chunkIndex": 2,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 3,
+        "termFrequency": 1
+      }
+    ],
+    "this": [
+      {
+        "chunkIndex": 0,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 1,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 2,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 3,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 4,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 5,
+        "termFrequency": 1
+      }
+    ],
+    "to": [
+      {
+        "chunkIndex": 2,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 3,
+        "termFrequency": 1
+      }
+    ],
+    "toolchain": [
+      {
+        "chunkIndex": 2,
+        "termFrequency": 2
+      },
+      {
+        "chunkIndex": 3,
+        "termFrequency": 1
+      }
+    ],
+    "traces": [
+      {
+        "chunkIndex": 4,
+        "termFrequency": 1
+      }
+    ],
+    "virtual": [
+      {
+        "chunkIndex": 0,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 1,
+        "termFrequency": 1
+      }
+    ],
+    "workflows": [
+      {
+        "chunkIndex": 0,
+        "termFrequency": 1
+      },
+      {
+        "chunkIndex": 1,
+        "termFrequency": 1
+      }
+    ]
+  }
+}
