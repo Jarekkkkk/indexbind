@@ -48,7 +48,7 @@ Current published prebuilt targets:
 - macOS x64
 - Linux x64 (glibc)
 
-Windows native prebuilds are not included yet. On Windows, use WSL or build from source in a Rust toolchain environment.
+Windows native prebuilds are not included. On Windows, use WSL for install, build, and local Node query flows.
 
 If a prebuilt addon is unavailable for your platform, install from source in a Rust toolchain environment and run:
 
@@ -138,6 +138,8 @@ Use the docs by task:
 
 - [Getting Started](./docs/site/guides/getting-started.md)
 - [Choosing indexbind](./docs/site/guides/choosing-indexbind.md)
+- [Adoption Examples](./docs/site/guides/adoption-examples.md)
+- [Benchmarks and Case Studies](./docs/site/guides/benchmarks-and-case-studies.md)
 - [API Reference](./docs/site/reference/api.md)
 - [CLI Reference](./docs/site/reference/cli.md)
 - [Web and Cloudflare](./docs/site/guides/web-and-cloudflare.md)

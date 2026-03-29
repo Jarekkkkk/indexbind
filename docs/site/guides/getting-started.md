@@ -28,6 +28,8 @@ Supported prebuilt native targets:
 - macOS x64
 - Linux x64 (glibc)
 
+On Windows, use WSL for install, build, and local Node query flows. Native Windows prebuilds are not published.
+
 If your platform does not have a prebuilt native addon, build the native package locally in a Rust toolchain environment:
 
 ```bash

@@ -53,6 +53,10 @@ If that decision is still unclear, go to [Choosing indexbind](./guides/choosing-
   [Getting Started](./guides/getting-started.md)
 - Want to decide whether it fits better than Pagefind, qmd, or Meilisearch:
   [Choosing indexbind](./guides/choosing-indexbind.md)
+- Want concrete integration shapes for docs, publishing, or local knowledge-base workflows:
+  [Adoption Examples](./guides/adoption-examples.md)
+- Want an indicative local baseline and current in-house usage patterns:
+  [Benchmarks and Case Studies](./guides/benchmarks-and-case-studies.md)
 - Want to integrate from code:
   [API](./reference/api.md)
 - Want to drive builds from the CLI:
@@ -65,13 +69,15 @@ If that decision is still unclear, go to [Choosing indexbind](./guides/choosing-
 ## Current Platform Support
 
 - Native prebuilds are published for macOS arm64, macOS x64, and Linux x64 (glibc).
-- Windows native prebuilds are not published yet.
+- Windows native prebuilds are not published; use WSL for install, build, and local Node query flows.
 - Canonical bundle runtimes work across browsers, Workers, and Cloudflare Workers.
 
 ## Docs Map
 
 - [Getting Started](./guides/getting-started.md)
 - [Choosing indexbind](./guides/choosing-indexbind.md)
+- [Adoption Examples](./guides/adoption-examples.md)
+- [Benchmarks and Case Studies](./guides/benchmarks-and-case-studies.md)
 - [Search Quality Controls](./guides/search-quality-controls.md)
 - [Web and Cloudflare](./guides/web-and-cloudflare.md)
 - [API](./reference/api.md)

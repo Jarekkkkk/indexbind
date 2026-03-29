@@ -18,8 +18,14 @@ Use these pages when you want a working setup quickly.
 - [Getting Started](./getting-started.md)
   2026-03-25 · Install indexbind, build a native artifact and canonical bundle, and run your first query end to end.
 
+- [Adoption Examples](./adoption-examples.md)
+  2026-03-29 · Map indexbind onto docs, publishing, and local knowledge-base workflows without giving up host control.
+
 - [Web and Cloudflare](./web-and-cloudflare.md)
   2026-03-25 · Load canonical bundles in browsers, workers, and Cloudflare Workers.
+
+- [Benchmarks and Case Studies](./benchmarks-and-case-studies.md)
+  2026-03-29 · Review an indicative local baseline and the current in-house usage patterns behind indexbind.
 
 - [Search Quality Controls](./search-quality-controls.md)
   2026-03-26 · Understand which search options affect recall, reranking, filtering, and final ordering.
