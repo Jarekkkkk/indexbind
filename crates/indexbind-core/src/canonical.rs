@@ -235,7 +235,7 @@ pub fn build_canonical_artifact(
     })
 }
 
-fn maybe_write_model_assets(
+pub(crate) fn maybe_write_model_assets(
     output_dir: &Path,
     embedding_backend: &EmbeddingBackend,
 ) -> Result<Option<CanonicalModelFiles>> {
@@ -257,7 +257,7 @@ fn maybe_write_model_assets(
     }))
 }
 
-fn build_postings(chunks: &[CanonicalChunkRecord]) -> CanonicalPostings {
+pub(crate) fn build_postings(chunks: &[CanonicalChunkRecord]) -> CanonicalPostings {
     let mut postings: BTreeMap<String, Vec<CanonicalPosting>> = BTreeMap::new();
     let mut document_frequency: BTreeMap<String, usize> = BTreeMap::new();
     let mut total_chunk_length = 0usize;

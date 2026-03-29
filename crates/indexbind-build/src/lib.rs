@@ -1,13 +1,25 @@
 use anyhow::{anyhow, Result};
 use indexbind_core::{
-    build_artifact, build_canonical_artifact, BuildArtifactOptions, BuildStats,
-    CanonicalBuildStats, NormalizedDocument, SourceRoot,
+    build_artifact, build_canonical_artifact, export_artifact_from_build_cache,
+    export_canonical_from_build_cache, update_build_cache, BuildArtifactOptions, BuildCacheUpdate,
+    BuildStats, CanonicalBuildStats, IncrementalBuildStats, NormalizedDocument, SourceRoot,
 };
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use walkdir::WalkDir;
+
+#[derive(Debug, Clone, Default)]
+pub enum DirectoryUpdateMode {
+    #[default]
+    FullScan,
+    GitDiff {
+        base_revision: Option<String>,
+    },
+}
 
 pub fn build_from_directory(
     input: &Path,
@@ -21,6 +33,47 @@ pub fn build_from_directory(
     };
     let documents = read_documents(&source_root)?;
     build_artifact(output, &documents, &options).map_err(Into::into)
+}
+
+pub fn update_cache_from_directory(
+    input: &Path,
+    cache_path: &Path,
+    options: BuildArtifactOptions,
+) -> Result<IncrementalBuildStats> {
+    update_cache_from_directory_with_mode(input, cache_path, options, DirectoryUpdateMode::FullScan)
+}
+
+pub fn update_cache_from_directory_with_mode(
+    input: &Path,
+    cache_path: &Path,
+    mut options: BuildArtifactOptions,
+    mode: DirectoryUpdateMode,
+) -> Result<IncrementalBuildStats> {
+    let source_root = input.canonicalize()?;
+    options.source_root = SourceRoot {
+        id: "root".to_string(),
+        original_path: source_root.display().to_string(),
+    };
+    match read_directory_update(&source_root, mode) {
+        Ok(update) => update_build_cache(cache_path, update, &options).map_err(Into::into),
+        Err(_) => {
+            let documents = read_documents(&source_root)?;
+            update_build_cache(
+                cache_path,
+                BuildCacheUpdate {
+                    documents,
+                    removed_relative_paths: Vec::new(),
+                    replace_all: true,
+                },
+                &options,
+            )
+            .map_err(Into::into)
+        }
+    }
+}
+
+pub fn export_artifact_from_cache(cache_path: &Path, output: &Path) -> Result<BuildStats> {
+    export_artifact_from_build_cache(cache_path, output).map_err(Into::into)
 }
 
 pub fn build_canonical_from_directory(
@@ -37,7 +90,21 @@ pub fn build_canonical_from_directory(
     build_canonical_artifact(output_dir, &documents, &options).map_err(Into::into)
 }
 
+pub fn export_canonical_from_cache(
+    cache_path: &Path,
+    output_dir: &Path,
+) -> Result<CanonicalBuildStats> {
+    export_canonical_from_build_cache(cache_path, output_dir).map_err(Into::into)
+}
+
 fn read_documents(root: &Path) -> Result<Vec<NormalizedDocument>> {
+    read_documents_for_relative_paths(root, None)
+}
+
+fn read_documents_for_relative_paths(
+    root: &Path,
+    relative_paths: Option<&BTreeSet<String>>,
+) -> Result<Vec<NormalizedDocument>> {
     let mut documents = Vec::new();
     for entry in WalkDir::new(root)
         .into_iter()
@@ -47,8 +114,11 @@ fn read_documents(root: &Path) -> Result<Vec<NormalizedDocument>> {
             continue;
         }
         let path = entry.path();
-        let source = fs::read_to_string(path)?;
         let relative_path = relative_path(root, path)?;
+        if relative_paths.is_some_and(|allowed| !allowed.contains(&relative_path)) {
+            continue;
+        }
+        let source = fs::read_to_string(path)?;
         let file_name_title = path
             .file_stem()
             .and_then(|stem| stem.to_str())
@@ -66,6 +136,61 @@ fn read_documents(root: &Path) -> Result<Vec<NormalizedDocument>> {
         });
     }
     Ok(documents)
+}
+
+fn read_directory_update(root: &Path, mode: DirectoryUpdateMode) -> Result<BuildCacheUpdate> {
+    match mode {
+        DirectoryUpdateMode::FullScan => Ok(BuildCacheUpdate {
+            documents: read_documents(root)?,
+            removed_relative_paths: Vec::new(),
+            replace_all: true,
+        }),
+        DirectoryUpdateMode::GitDiff { base_revision } => read_git_diff_update(root, base_revision),
+    }
+}
+
+fn read_git_diff_update(root: &Path, base_revision: Option<String>) -> Result<BuildCacheUpdate> {
+    ensure_git_repository(root)?;
+    let mut changed = BTreeSet::new();
+    let mut removed = BTreeSet::new();
+
+    if let Some(base_revision) = base_revision {
+        collect_git_name_status(
+            root,
+            &[
+                "diff",
+                "--name-status",
+                "-z",
+                &format!("{base_revision}...HEAD"),
+                "--",
+                ".",
+            ],
+            &mut changed,
+            &mut removed,
+        )?;
+    } else {
+        collect_git_name_status(
+            root,
+            &["diff", "--name-status", "-z", "HEAD", "--", "."],
+            &mut changed,
+            &mut removed,
+        )?;
+    }
+
+    collect_git_name_status(
+        root,
+        &["diff", "--name-status", "-z", "--", "."],
+        &mut changed,
+        &mut removed,
+    )?;
+    collect_untracked_files(root, &mut changed)?;
+
+    let documents = read_documents_for_relative_paths(root, Some(&changed))?;
+    Ok(BuildCacheUpdate {
+        documents,
+        removed_relative_paths: removed.into_iter().collect(),
+        replace_all: false,
+    })
 }
 
 #[derive(Debug, PartialEq)]
@@ -175,6 +300,113 @@ fn supported_extension(path: &Path) -> bool {
     )
 }
 
+fn supported_relative_path(path: &str) -> bool {
+    supported_extension(Path::new(path))
+}
+
+fn ensure_git_repository(root: &Path) -> Result<()> {
+    let status = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["rev-parse", "--show-toplevel"])
+        .status()?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(anyhow!("source root is not inside a git repository"))
+    }
+}
+
+fn collect_git_name_status(
+    root: &Path,
+    args: &[&str],
+    changed: &mut BTreeSet<String>,
+    removed: &mut BTreeSet<String>,
+) -> Result<()> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(args)
+        .output()?;
+    if !output.status.success() {
+        return Err(anyhow!(
+            "git command failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    parse_git_name_status(&output.stdout, changed, removed);
+    Ok(())
+}
+
+fn collect_untracked_files(root: &Path, changed: &mut BTreeSet<String>) -> Result<()> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["ls-files", "--others", "--exclude-standard", "-z"])
+        .output()?;
+    if !output.status.success() {
+        return Err(anyhow!(
+            "git command failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    for path in output
+        .stdout
+        .split(|byte| *byte == 0)
+        .filter(|path| !path.is_empty())
+    {
+        let relative_path = normalize_relative_path_bytes(path);
+        if supported_relative_path(&relative_path) {
+            changed.insert(relative_path);
+        }
+    }
+    Ok(())
+}
+
+fn parse_git_name_status(
+    bytes: &[u8],
+    changed: &mut BTreeSet<String>,
+    removed: &mut BTreeSet<String>,
+) {
+    let mut fields = bytes
+        .split(|byte| *byte == 0)
+        .filter(|field| !field.is_empty());
+    while let Some(status_bytes) = fields.next() {
+        let status = String::from_utf8_lossy(status_bytes);
+        let code = status.chars().next().unwrap_or('M');
+        match code {
+            'R' | 'C' => {
+                let old_path = fields.next().map(normalize_relative_path_bytes);
+                let new_path = fields.next().map(normalize_relative_path_bytes);
+                if let Some(old_path) = old_path.filter(|path| supported_relative_path(path)) {
+                    removed.insert(old_path);
+                }
+                if let Some(new_path) = new_path.filter(|path| supported_relative_path(path)) {
+                    changed.insert(new_path);
+                }
+            }
+            'D' => {
+                if let Some(path) = fields.next().map(normalize_relative_path_bytes) {
+                    if supported_relative_path(&path) {
+                        removed.insert(path);
+                    }
+                }
+            }
+            _ => {
+                if let Some(path) = fields.next().map(normalize_relative_path_bytes) {
+                    if supported_relative_path(&path) {
+                        changed.insert(path);
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn normalize_relative_path_bytes(bytes: &[u8]) -> String {
+    String::from_utf8_lossy(bytes).replace('\\', "/")
+}
+
 fn yaml_mapping_to_json_map(value: serde_yaml::Value) -> Option<Map<String, Value>> {
     serde_json::to_value(value).ok()?.as_object().cloned()
 }
@@ -186,9 +418,16 @@ fn _debug_root(path: &PathBuf) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_document_source, read_documents};
+    use super::{
+        parse_document_source, read_documents, update_cache_from_directory_with_mode,
+        DirectoryUpdateMode,
+    };
+    use anyhow::{anyhow, Result};
+    use indexbind_core::BuildArtifactOptions;
     use serde_json::json;
     use std::fs;
+    use std::path::Path;
+    use std::process::Command;
 
     #[test]
     fn frontmatter_overrides_body_heading_and_populates_metadata() {
@@ -292,5 +531,71 @@ Body
         assert_eq!(document.canonical_url.as_deref(), Some("/docs/guide"));
         assert_eq!(document.metadata.get("section"), Some(&json!("docs")));
         assert_eq!(document.content.trim_start(), "# Ignored Heading\n\nBody\n");
+    }
+
+    #[test]
+    fn git_diff_mode_updates_only_changed_and_removed_files() {
+        if Command::new("git").arg("--version").output().is_err() {
+            return;
+        }
+
+        let tempdir = tempfile::tempdir().unwrap();
+        run_git(tempdir.path(), &["init"]).unwrap();
+        run_git(
+            tempdir.path(),
+            &["config", "user.email", "codex@example.com"],
+        )
+        .unwrap();
+        run_git(tempdir.path(), &["config", "user.name", "Codex"]).unwrap();
+
+        fs::write(tempdir.path().join("a.md"), "# A\n\nAlpha\n").unwrap();
+        fs::write(tempdir.path().join("b.md"), "# B\n\nBeta\n").unwrap();
+        run_git(tempdir.path(), &["add", "."]).unwrap();
+        run_git(tempdir.path(), &["commit", "-m", "init"]).unwrap();
+
+        let cache = tempdir.path().join("build-cache.sqlite");
+        let options = BuildArtifactOptions::default();
+        let first = update_cache_from_directory_with_mode(
+            tempdir.path(),
+            &cache,
+            options.clone(),
+            DirectoryUpdateMode::FullScan,
+        )
+        .unwrap();
+        assert_eq!(first.new_document_count, 2);
+
+        fs::write(tempdir.path().join("a.md"), "# A\n\nAlpha updated\n").unwrap();
+        fs::remove_file(tempdir.path().join("b.md")).unwrap();
+        fs::write(tempdir.path().join("c.md"), "# C\n\nGamma\n").unwrap();
+
+        let second = update_cache_from_directory_with_mode(
+            tempdir.path(),
+            &cache,
+            options,
+            DirectoryUpdateMode::GitDiff {
+                base_revision: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(second.changed_document_count, 1);
+        assert_eq!(second.new_document_count, 1);
+        assert_eq!(second.removed_document_count, 1);
+        assert_eq!(second.active_document_count, 2);
+    }
+
+    fn run_git(root: &Path, args: &[&str]) -> Result<()> {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args(args)
+            .output()?;
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(anyhow!(
+                "git command failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ))
+        }
     }
 }

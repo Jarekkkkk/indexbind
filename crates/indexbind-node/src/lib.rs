@@ -1,6 +1,8 @@
 use indexbind_core::{
-    build_canonical_artifact, BuildArtifactOptions, CanonicalBuildStats, ChunkingOptions,
-    DocumentHit, EmbeddingBackend, NormalizedDocument, Retriever, SearchOptions, SourceRoot,
+    build_canonical_artifact, export_artifact_from_build_cache, export_canonical_from_build_cache,
+    update_build_cache, BuildArtifactOptions, BuildCacheUpdate, BuildStats, CanonicalBuildStats,
+    ChunkingOptions, DocumentHit, EmbeddingBackend, IncrementalBuildStats, NormalizedDocument,
+    Retriever, SearchOptions, SourceRoot,
 };
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
@@ -92,6 +94,23 @@ pub struct NodeCanonicalBuildStats {
     pub document_count: u32,
     pub chunk_count: u32,
     pub vector_dimensions: u32,
+}
+
+#[napi(object)]
+pub struct NodeBuildStats {
+    pub document_count: u32,
+    pub chunk_count: u32,
+}
+
+#[napi(object)]
+pub struct NodeIncrementalBuildStats {
+    pub scanned_document_count: u32,
+    pub new_document_count: u32,
+    pub changed_document_count: u32,
+    pub unchanged_document_count: u32,
+    pub removed_document_count: u32,
+    pub active_document_count: u32,
+    pub active_chunk_count: u32,
 }
 
 #[napi]
@@ -210,6 +229,53 @@ pub fn build_canonical_bundle(
     Ok(map_build_stats(stats))
 }
 
+#[napi]
+pub fn update_build_cache_from_documents(
+    cache_path: String,
+    documents: Vec<NodeBuildDocument>,
+    removed_relative_paths: Option<Vec<String>>,
+    options: Option<NodeBuildOptions>,
+) -> napi::Result<NodeIncrementalBuildStats> {
+    let build_options = map_build_options(options);
+    let normalized_documents = documents
+        .into_iter()
+        .map(map_build_document)
+        .collect::<napi::Result<Vec<_>>>()?;
+    let stats = update_build_cache(
+        &PathBuf::from(cache_path),
+        BuildCacheUpdate {
+            documents: normalized_documents,
+            removed_relative_paths: removed_relative_paths.unwrap_or_default(),
+            replace_all: false,
+        },
+        &build_options,
+    )
+    .map_err(map_error)?;
+    Ok(map_incremental_build_stats(stats))
+}
+
+#[napi]
+pub fn export_artifact_from_cache(
+    cache_path: String,
+    output_path: String,
+) -> napi::Result<NodeBuildStats> {
+    let stats =
+        export_artifact_from_build_cache(&PathBuf::from(cache_path), &PathBuf::from(output_path))
+            .map_err(map_error)?;
+    Ok(map_plain_build_stats(stats))
+}
+
+#[napi]
+pub fn export_canonical_bundle_from_cache(
+    cache_path: String,
+    output_dir: String,
+) -> napi::Result<NodeCanonicalBuildStats> {
+    let stats =
+        export_canonical_from_build_cache(&PathBuf::from(cache_path), &PathBuf::from(output_dir))
+            .map_err(map_error)?;
+    Ok(map_build_stats(stats))
+}
+
 fn map_hit(hit: DocumentHit) -> NodeDocumentHit {
     NodeDocumentHit {
         doc_id: hit.doc_id,
@@ -297,6 +363,25 @@ fn map_build_stats(stats: CanonicalBuildStats) -> NodeCanonicalBuildStats {
         document_count: stats.document_count as u32,
         chunk_count: stats.chunk_count as u32,
         vector_dimensions: stats.vector_dimensions as u32,
+    }
+}
+
+fn map_plain_build_stats(stats: BuildStats) -> NodeBuildStats {
+    NodeBuildStats {
+        document_count: stats.document_count as u32,
+        chunk_count: stats.chunk_count as u32,
+    }
+}
+
+fn map_incremental_build_stats(stats: IncrementalBuildStats) -> NodeIncrementalBuildStats {
+    NodeIncrementalBuildStats {
+        scanned_document_count: stats.scanned_document_count as u32,
+        new_document_count: stats.new_document_count as u32,
+        changed_document_count: stats.changed_document_count as u32,
+        unchanged_document_count: stats.unchanged_document_count as u32,
+        removed_document_count: stats.removed_document_count as u32,
+        active_document_count: stats.active_document_count as u32,
+        active_chunk_count: stats.active_chunk_count as u32,
     }
 }
 
