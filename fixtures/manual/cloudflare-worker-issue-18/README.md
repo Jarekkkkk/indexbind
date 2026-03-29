@@ -27,6 +27,14 @@ That refreshes:
 
 ## Run locally
 
+Build the runtime first:
+
+```bash
+npm run build
+```
+
+Then start the fixture:
+
 ```bash
 npm run testcase:cloudflare-worker:dev
 ```
