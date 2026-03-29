@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "1",
+  "artifactFormat": "file-bundle-v1",
+  "builtAt": "1774786870",
+  "embeddingBackend": {
+    "Hashing": {
+      "dimensions": 256
+    }
+  },
+  "documentCount": 3,
+  "chunkCount": 6,
+  "vectorDimensions": 256,
+  "chunking": {
+    "targetTokens": 512,
+    "overlapTokens": 64
+  },
+  "files": {
+    "documents": "documents.json",
+    "chunks": "chunks.json",
+    "vectors": "vectors.bin",
+    "postings": "postings.json"
+  },
+  "features": [
+    "vector-search",
+    "lexical-postings",
+    "retrieval-only-results"
+  ]
+}

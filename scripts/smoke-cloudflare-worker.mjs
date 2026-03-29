@@ -27,6 +27,26 @@ const cases = [
   },
 ];
 
+const requestModes = [
+  {
+    name: 'direct-http',
+    headers(testCase, baseUrl) {
+      return {
+        'x-bundle-base-url': `${baseUrl}/${path.basename(testCase.bundleDir)}/`,
+      };
+    },
+  },
+  {
+    name: 'virtual-bundle',
+    headers(testCase, baseUrl) {
+      return {
+        'x-bundle-base-url': `https://indexbind-smoke.invalid/${path.basename(testCase.bundleDir)}/`,
+        'x-bundle-backing-base-url': `${baseUrl}/${path.basename(testCase.bundleDir)}/`,
+      };
+    },
+  },
+];
+
 for (const testCase of cases) {
   run(
     cargoCommand,
@@ -69,44 +89,47 @@ try {
   await worker.ready;
 
   for (const testCase of cases) {
-    const response = await withTimeout(
-      worker.fetch(
-        `https://indexbind-smoke.example/search?case=${encodeURIComponent(testCase.name)}`,
-        {
-          headers: {
-            'x-bundle-base-url': `${baseUrl}/${path.basename(testCase.bundleDir)}/`,
+    for (const requestMode of requestModes) {
+      const response = await withTimeout(
+        worker.fetch(
+          `https://indexbind-smoke.example/search?case=${encodeURIComponent(
+            testCase.name,
+          )}&mode=${encodeURIComponent(requestMode.name)}`,
+          {
+            headers: requestMode.headers(testCase, baseUrl),
           },
-        },
-      ),
-      20000,
-      `Cloudflare worker request timed out for case ${testCase.name}`,
-    );
-    const result = await response.json();
+        ),
+        20000,
+        `Cloudflare worker request timed out for case ${testCase.name} (${requestMode.name})`,
+      );
+      const result = await response.json();
 
-    if (!response.ok) {
-      throw new Error(`[${testCase.name}] ${result.error ?? response.statusText}`);
-    }
-    if (!result.topHit) {
-      throw new Error(`[${testCase.name}] expected at least one hit`);
-    }
-    if (result.topHit !== expectedTopHit) {
-      throw new Error(
-        `[${testCase.name}] expected top hit ${expectedTopHit}, got ${result.topHit}`,
+      if (!response.ok) {
+        throw new Error(`[${testCase.name}/${requestMode.name}] ${result.error ?? response.statusText}`);
+      }
+      if (!result.topHit) {
+        throw new Error(`[${testCase.name}/${requestMode.name}] expected at least one hit`);
+      }
+      if (result.topHit !== expectedTopHit) {
+        throw new Error(
+          `[${testCase.name}/${requestMode.name}] expected top hit ${expectedTopHit}, got ${result.topHit}`,
+        );
+      }
+
+      console.log(
+        JSON.stringify(
+          {
+            case: testCase.name,
+            mode: requestMode.name,
+            runtime: 'cloudflare-worker',
+            topHit: result.topHit,
+            score: result.score,
+          },
+          null,
+          2,
+        ),
       );
     }
-
-    console.log(
-      JSON.stringify(
-        {
-          case: testCase.name,
-          runtime: 'cloudflare-worker',
-          topHit: result.topHit,
-          score: result.score,
-        },
-        null,
-        2,
-      ),
-    );
   }
 } finally {
   if (worker) {
@@ -151,11 +174,14 @@ export default {
   async fetch(request: Request) {
     try {
       const bundleBaseUrl = request.headers.get('x-bundle-base-url');
+      const backingBaseUrl = request.headers.get('x-bundle-backing-base-url');
       if (!bundleBaseUrl) {
         return Response.json({ error: 'missing bundle base url header' }, { status: 400 });
       }
 
-      const index = await openWebIndex(bundleBaseUrl);
+      const index = backingBaseUrl
+        ? await openVirtualBundleIndex(bundleBaseUrl, backingBaseUrl)
+        : await openWebIndex(bundleBaseUrl);
       const hits = await index.search('rust guide');
       return Response.json({
         topHit: hits[0]?.relativePath,
@@ -172,6 +198,35 @@ export default {
     }
   },
 };
+
+async function openVirtualBundleIndex(bundleBaseUrl: string, backingBaseUrl: string) {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const requestUrl =
+      typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
+    if (requestUrl.startsWith(bundleBaseUrl)) {
+      const relativePath = requestUrl.slice(bundleBaseUrl.length);
+      const rewrittenUrl = new URL(relativePath, backingBaseUrl);
+      if (typeof input === 'string' || input instanceof URL) {
+        return originalFetch(rewrittenUrl, init);
+      }
+
+      return originalFetch(new Request(rewrittenUrl, input), init);
+    }
+
+    return originalFetch(input as RequestInfo, init);
+  };
+
+  try {
+    return await openWebIndex(new URL(bundleBaseUrl));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
 `,
   );
 

@@ -145,7 +145,18 @@ interface WasmSearchBackend {
   search(query: string, options?: unknown): unknown;
 }
 
-type WasmRuntime = 'web' | 'bundler';
+export interface WasmIndexBinding {
+  new (
+    manifest: unknown,
+    documents: unknown,
+    chunks: unknown,
+    vectors: Uint8Array,
+    postings: unknown,
+    tokenizerBytes?: Uint8Array,
+    modelBytes?: Uint8Array,
+    configBytes?: Uint8Array,
+  ): WasmSearchBackend;
+}
 
 export class WebIndex {
   readonly #manifest: CanonicalArtifactManifest;
@@ -153,7 +164,7 @@ export class WebIndex {
   readonly #documentsById: Map<string, CanonicalDocumentRecord>;
   readonly #wasmIndex: WasmSearchBackend;
 
-  private constructor(
+  constructor(
     manifest: CanonicalArtifactManifest,
     documents: CanonicalDocumentRecord[],
     wasmIndex: WasmSearchBackend,
@@ -164,29 +175,8 @@ export class WebIndex {
     this.#wasmIndex = wasmIndex;
   }
 
-  static async open(base: string | URL, wasmRuntime: WasmRuntime = 'web'): Promise<WebIndex> {
-    const manifest = await loadJson<CanonicalArtifactManifest>(base, 'manifest.json');
-    const documents = await loadJson<CanonicalDocumentRecord[]>(base, manifest.files.documents);
-    const chunks = await loadJson<CanonicalChunkRecord[]>(base, manifest.files.chunks);
-    const postings = await loadJson<CanonicalPostings>(base, manifest.files.postings);
-    const vectorsBuffer = await loadArrayBuffer(base, manifest.files.vectors);
-    const modelBuffers = manifest.files.model
-      ? await Promise.all([
-          loadArrayBuffer(base, manifest.files.model.tokenizer),
-          loadArrayBuffer(base, manifest.files.model.weights),
-          loadArrayBuffer(base, manifest.files.model.config),
-        ])
-      : undefined;
-    const wasmIndex = await createWasmIndex(
-      manifest,
-      documents,
-      chunks,
-      vectorsBuffer,
-      postings,
-      modelBuffers,
-      wasmRuntime,
-    );
-    return new WebIndex(manifest, documents, wasmIndex);
+  static async open(base: string | URL): Promise<WebIndex> {
+    return openWebIndexInternal(base, createBrowserWasmIndex);
   }
 
   info(): WebArtifactInfo {
@@ -208,64 +198,81 @@ export class WebIndex {
   }
 }
 
+async function openWebIndexInternal(
+  base: string | URL,
+  createBackend: (
+    manifest: CanonicalArtifactManifest,
+    documents: CanonicalDocumentRecord[],
+    chunks: CanonicalChunkRecord[],
+    vectorsBuffer: ArrayBuffer,
+    postings: CanonicalPostings,
+    modelBuffers?: [ArrayBuffer, ArrayBuffer, ArrayBuffer],
+  ) => Promise<WasmSearchBackend>,
+): Promise<WebIndex> {
+  const manifest = await loadJson<CanonicalArtifactManifest>(base, 'manifest.json');
+  const documents = await loadJson<CanonicalDocumentRecord[]>(base, manifest.files.documents);
+  const chunks = await loadJson<CanonicalChunkRecord[]>(base, manifest.files.chunks);
+  const postings = await loadJson<CanonicalPostings>(base, manifest.files.postings);
+  const vectorsBuffer = await loadArrayBuffer(base, manifest.files.vectors);
+  const modelBuffers = manifest.files.model
+    ? await Promise.all([
+        loadArrayBuffer(base, manifest.files.model.tokenizer),
+        loadArrayBuffer(base, manifest.files.model.weights),
+        loadArrayBuffer(base, manifest.files.model.config),
+      ])
+    : undefined;
+  const wasmIndex = await createBackend(
+    manifest,
+    documents,
+    chunks,
+    vectorsBuffer,
+    postings,
+    modelBuffers,
+  );
+  return new WebIndex(manifest, documents, wasmIndex);
+}
+
 export async function openWebIndex(base: string | URL): Promise<WebIndex> {
-  return WebIndex.open(base, 'web');
+  return openWebIndexInternal(base, createBrowserWasmIndex);
+}
+
+export async function openWebIndexWithBindings(
+  base: string | URL,
+  WasmIndex: WasmIndexBinding,
+): Promise<WebIndex> {
+  return openWebIndexInternal(base, async (manifest, documents, chunks, vectorsBuffer, postings, modelBuffers) =>
+    createBoundWasmIndex(
+      manifest,
+      documents,
+      chunks,
+      vectorsBuffer,
+      postings,
+      modelBuffers,
+      WasmIndex,
+    ),
+  );
 }
 
 export async function openCloudflareIndex(base: string | URL): Promise<WebIndex> {
-  return WebIndex.open(base, 'bundler');
+  const cloudflareModule = (await import('./cloudflare.js')) as {
+    openWebIndex: (base: string | URL) => Promise<WebIndex>;
+  };
+  return cloudflareModule.openWebIndex(base);
 }
 
-async function createWasmIndex(
+async function createBrowserWasmIndex(
   manifest: CanonicalArtifactManifest,
   documents: CanonicalDocumentRecord[],
   chunks: CanonicalChunkRecord[],
   vectorsBuffer: ArrayBuffer,
   postings: CanonicalPostings,
   modelBuffers?: [ArrayBuffer, ArrayBuffer, ArrayBuffer],
-  wasmRuntime: WasmRuntime = 'web',
 ): Promise<WasmSearchBackend> {
   if (!supportsWasmBackend(manifest.embeddingBackend)) {
     throw new Error('unsupported embedding backend for web runtime');
   }
 
   try {
-    if (wasmRuntime === 'bundler') {
-      const [wasmBindings, wasmBinaryModule] = await Promise.all([
-        import('./wasm/indexbind_wasm.js') as Promise<{
-          initSync: (module: WebAssembly.Module) => unknown;
-          WasmIndex: new (
-            manifest: unknown,
-            documents: unknown,
-            chunks: unknown,
-            vectors: Uint8Array,
-            postings: unknown,
-            tokenizerBytes?: Uint8Array,
-            modelBytes?: Uint8Array,
-            configBytes?: Uint8Array,
-          ) => WasmSearchBackend;
-        }>,
-        import('./wasm-bundler/indexbind_wasm_bg.wasm') as Promise<
-          WebAssembly.Module | { default: WebAssembly.Module }
-        >,
-      ]);
-      const compiledModule =
-        wasmBinaryModule instanceof WebAssembly.Module
-          ? wasmBinaryModule
-          : wasmBinaryModule.default;
-      wasmBindings.initSync({ module: compiledModule });
-      return new wasmBindings.WasmIndex(
-        manifest,
-        documents,
-        chunks,
-        new Uint8Array(vectorsBuffer),
-        postings,
-        modelBuffers ? new Uint8Array(modelBuffers[0]) : undefined,
-        modelBuffers ? new Uint8Array(modelBuffers[1]) : undefined,
-        modelBuffers ? new Uint8Array(modelBuffers[2]) : undefined,
-      );
-    }
-
     const wasmModuleUrl = new URL('./wasm/indexbind_wasm.js', import.meta.url).href;
     const wasmModule = (await import(wasmModuleUrl)) as {
       default: (input?: unknown) => Promise<void>;
@@ -293,12 +300,37 @@ async function createWasmIndex(
       modelBuffers ? new Uint8Array(modelBuffers[2]) : undefined,
     );
   } catch (error) {
-    throw new Error(
-      `failed to initialize wasm web runtime: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
+    const detail =
+      error instanceof Error ? error.stack ?? `${error.name}: ${error.message}` : String(error);
+    throw new Error(`failed to initialize wasm web runtime: ${detail}`, {
+      cause: error instanceof Error ? error : undefined,
+    });
   }
+}
+
+function createBoundWasmIndex(
+  manifest: CanonicalArtifactManifest,
+  documents: CanonicalDocumentRecord[],
+  chunks: CanonicalChunkRecord[],
+  vectorsBuffer: ArrayBuffer,
+  postings: CanonicalPostings,
+  modelBuffers: [ArrayBuffer, ArrayBuffer, ArrayBuffer] | undefined,
+  WasmIndex: WasmIndexBinding,
+): WasmSearchBackend {
+  if (!supportsWasmBackend(manifest.embeddingBackend)) {
+    throw new Error('unsupported embedding backend for web runtime');
+  }
+
+  return new WasmIndex(
+    manifest,
+    documents,
+    chunks,
+    new Uint8Array(vectorsBuffer),
+    postings,
+    modelBuffers ? new Uint8Array(modelBuffers[0]) : undefined,
+    modelBuffers ? new Uint8Array(modelBuffers[1]) : undefined,
+    modelBuffers ? new Uint8Array(modelBuffers[2]) : undefined,
+  );
 }
 
 function documentMatches(document: CanonicalDocumentRecord, options: SearchOptions): boolean {

@@ -1,5 +1,8 @@
+import wasmModule from './wasm/indexbind_wasm_bg.wasm';
+import { initSync, WasmIndex } from './wasm/indexbind_wasm.js';
+import { openWebIndexWithBindings } from './web.js';
+
 export {
-  openCloudflareIndex as openWebIndex,
   WebIndex,
   type BestMatch,
   type DocumentHit,
@@ -8,3 +11,15 @@ export {
   type SearchOptions,
   type WebArtifactInfo,
 } from './web.js';
+
+let wasmInitialized = false;
+
+export async function openWebIndex(base: string | URL) {
+  if (!wasmInitialized) {
+    initSync({ module: wasmModule });
+    wasmInitialized = true;
+  }
+  return openWebIndexWithBindings(base, WasmIndex);
+}
+
+export { openWebIndex as openCloudflareIndex };

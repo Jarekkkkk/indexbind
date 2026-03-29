@@ -11,4 +11,7 @@ export class WasmIndex {
     modelBytes?: Uint8Array,
     configBytes?: Uint8Array,
   );
+
+  info(): unknown;
+  search(query: string, options?: unknown): unknown;
 }
