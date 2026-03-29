@@ -11,6 +11,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use walkdir::WalkDir;
+use yaml_rust2::{yaml::Hash as YamlHash, Yaml, YamlLoader};
 
 #[derive(Debug, Clone, Default)]
 pub enum DirectoryUpdateMode {
@@ -249,10 +250,13 @@ fn split_frontmatter(source: &str) -> Option<(&str, &str)> {
 }
 
 fn parse_frontmatter(frontmatter: &str) -> Option<ParsedFrontmatter> {
-    let value = serde_yaml::from_str::<serde_yaml::Value>(frontmatter).ok()?;
-    let Some(object) = yaml_mapping_to_json_map(value) else {
+    // Keep directory frontmatter parsing on a pure-Rust YAML path and immediately
+    // normalize into JSON-compatible values so runtime contracts stay unchanged.
+    let docs = YamlLoader::load_from_str(frontmatter).ok()?;
+    let Some(Yaml::Hash(object)) = docs.into_iter().next() else {
         return None;
     };
+    let object = yaml_hash_to_json_map(object)?;
 
     let mut metadata = BTreeMap::new();
     let mut title = None;
@@ -413,8 +417,47 @@ fn normalize_relative_path_bytes(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).replace('\\', "/")
 }
 
-fn yaml_mapping_to_json_map(value: serde_yaml::Value) -> Option<Map<String, Value>> {
-    serde_json::to_value(value).ok()?.as_object().cloned()
+fn yaml_hash_to_json_map(hash: YamlHash) -> Option<Map<String, Value>> {
+    let mut object = Map::new();
+    for (key, value) in hash {
+        object.insert(yaml_key_to_string(key)?, yaml_to_json_value(value)?);
+    }
+    Some(object)
+}
+
+fn yaml_key_to_string(key: Yaml) -> Option<String> {
+    match key {
+        Yaml::String(value) => Some(value),
+        Yaml::Integer(value) => Some(value.to_string()),
+        Yaml::Real(value) => Some(value),
+        Yaml::Boolean(value) => Some(value.to_string()),
+        Yaml::Null => Some("null".to_string()),
+        Yaml::BadValue | Yaml::Alias(_) | Yaml::Array(_) | Yaml::Hash(_) => None,
+    }
+}
+
+fn yaml_to_json_value(value: Yaml) -> Option<Value> {
+    match value {
+        Yaml::String(value) => Some(Value::String(value)),
+        Yaml::Integer(value) => Some(Value::Number(value.into())),
+        Yaml::Real(value) => {
+            let number = value
+                .parse::<f64>()
+                .ok()
+                .and_then(serde_json::Number::from_f64)?;
+            Some(Value::Number(number))
+        }
+        Yaml::Boolean(value) => Some(Value::Bool(value)),
+        Yaml::Array(values) => Some(Value::Array(
+            values
+                .into_iter()
+                .map(yaml_to_json_value)
+                .collect::<Option<Vec<_>>>()?,
+        )),
+        Yaml::Hash(hash) => Some(Value::Object(yaml_hash_to_json_map(hash)?)),
+        Yaml::Null => Some(Value::Null),
+        Yaml::BadValue | Yaml::Alias(_) => None,
+    }
 }
 
 #[allow(dead_code)]
@@ -537,6 +580,31 @@ Body
         assert_eq!(document.canonical_url.as_deref(), Some("/docs/guide"));
         assert_eq!(document.metadata.get("section"), Some(&json!("docs")));
         assert_eq!(document.content.trim_start(), "# Ignored Heading\n\nBody\n");
+    }
+
+    #[test]
+    fn nested_frontmatter_values_remain_json_compatible() {
+        let source = r#"---
+tags:
+  - rust
+  - docs
+config:
+  featured: true
+  weight: 3
+---
+
+Body
+"#;
+
+        let parsed = parse_document_source(source, None);
+        assert_eq!(parsed.metadata.get("tags"), Some(&json!(["rust", "docs"])));
+        assert_eq!(
+            parsed.metadata.get("config"),
+            Some(&json!({
+                "featured": true,
+                "weight": 3
+            }))
+        );
     }
 
     #[test]
