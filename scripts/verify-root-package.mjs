@@ -23,7 +23,6 @@ const requiredFiles = [
   'dist/web-core.d.ts',
   'dist/cloudflare.js',
   'dist/cloudflare.d.ts',
-  'dist/cloudflare/worker.mjs',
   'dist/wasm/indexbind_wasm.js',
   'dist/wasm/indexbind_wasm.d.ts',
   'dist/wasm/indexbind_wasm_bg.wasm',

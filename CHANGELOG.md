@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.3
+
+- Fixed the release-time root package verification added in `0.3.2` to avoid requiring non-contract local `dist/` leftovers such as `dist/cloudflare/worker.mjs`, which caused clean CI release builds to fail.
+
 ## 0.3.2
 
 - Fixed the published root npm package to include the full `dist/` tree, restoring `indexbind/web` and `indexbind/cloudflare` imports that broke in `0.3.1` because `dist/web-core.js` was omitted.
