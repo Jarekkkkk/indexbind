@@ -301,7 +301,9 @@ pub fn export_canonical_from_build_cache(
         vectors.extend_from_slice(&chunk.vector_blob);
     }
 
+    let mut running_chunk_offset = 0usize;
     for document in &active_documents {
+        let chunk_count = chunk_counts.get(&document.doc_id).copied().unwrap_or(0);
         canonical_documents.push(CanonicalDocumentRecord {
             doc_id: document.doc_id.clone(),
             relative_path: document.relative_path.clone(),
@@ -312,9 +314,10 @@ pub fn export_canonical_from_build_cache(
             first_chunk_index: first_chunk_indices
                 .get(&document.doc_id)
                 .copied()
-                .unwrap_or(0),
-            chunk_count: chunk_counts.get(&document.doc_id).copied().unwrap_or(0),
+                .unwrap_or(running_chunk_offset),
+            chunk_count,
         });
+        running_chunk_offset += chunk_count;
     }
 
     let postings = build_postings(&canonical_chunks);
@@ -504,9 +507,14 @@ fn refresh_cache_meta(connection: &Connection, options: &BuildArtifactOptions) -
         ),
     ]);
     let existing = load_cache_meta(connection)?;
-    let config_changed = existing
-        .get("source_root")
-        .is_some_and(|value| value != desired.get("source_root").unwrap())
+    let schema_mismatch = match existing.get("schema_version") {
+        Some(value) => value != desired.get("schema_version").unwrap(),
+        None => !existing.is_empty(),
+    };
+    let config_changed = schema_mismatch
+        || existing
+            .get("source_root")
+            .is_some_and(|value| value != desired.get("source_root").unwrap())
         || existing
             .get("embedding_backend_fingerprint")
             .is_some_and(|value| value != desired.get("embedding_backend_fingerprint").unwrap())

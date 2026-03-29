@@ -61,8 +61,8 @@ pub struct NodeArtifactInfo {
     pub embedding_backend: String,
     pub lexical_tokenizer: String,
     pub source_root: String,
-    pub document_count: u32,
-    pub chunk_count: u32,
+    pub document_count: i64,
+    pub chunk_count: i64,
 }
 
 #[napi(object)]
@@ -91,26 +91,26 @@ pub struct NodeBuildOptions {
 
 #[napi(object)]
 pub struct NodeCanonicalBuildStats {
-    pub document_count: u32,
-    pub chunk_count: u32,
-    pub vector_dimensions: u32,
+    pub document_count: i64,
+    pub chunk_count: i64,
+    pub vector_dimensions: i64,
 }
 
 #[napi(object)]
 pub struct NodeBuildStats {
-    pub document_count: u32,
-    pub chunk_count: u32,
+    pub document_count: i64,
+    pub chunk_count: i64,
 }
 
 #[napi(object)]
 pub struct NodeIncrementalBuildStats {
-    pub scanned_document_count: u32,
-    pub new_document_count: u32,
-    pub changed_document_count: u32,
-    pub unchanged_document_count: u32,
-    pub removed_document_count: u32,
-    pub active_document_count: u32,
-    pub active_chunk_count: u32,
+    pub scanned_document_count: i64,
+    pub new_document_count: i64,
+    pub changed_document_count: i64,
+    pub unchanged_document_count: i64,
+    pub removed_document_count: i64,
+    pub active_document_count: i64,
+    pub active_chunk_count: i64,
 }
 
 #[napi]
@@ -145,8 +145,8 @@ impl NativeIndex {
             embedding_backend,
             lexical_tokenizer: info.lexical_tokenizer.clone(),
             source_root,
-            document_count: info.document_count as u32,
-            chunk_count: info.chunk_count as u32,
+            document_count: info.document_count as i64,
+            chunk_count: info.chunk_count as i64,
         })
     }
 
@@ -360,28 +360,28 @@ fn map_build_options(options: Option<NodeBuildOptions>) -> BuildArtifactOptions 
 
 fn map_build_stats(stats: CanonicalBuildStats) -> NodeCanonicalBuildStats {
     NodeCanonicalBuildStats {
-        document_count: stats.document_count as u32,
-        chunk_count: stats.chunk_count as u32,
-        vector_dimensions: stats.vector_dimensions as u32,
+        document_count: stats.document_count as i64,
+        chunk_count: stats.chunk_count as i64,
+        vector_dimensions: stats.vector_dimensions as i64,
     }
 }
 
 fn map_plain_build_stats(stats: BuildStats) -> NodeBuildStats {
     NodeBuildStats {
-        document_count: stats.document_count as u32,
-        chunk_count: stats.chunk_count as u32,
+        document_count: stats.document_count as i64,
+        chunk_count: stats.chunk_count as i64,
     }
 }
 
 fn map_incremental_build_stats(stats: IncrementalBuildStats) -> NodeIncrementalBuildStats {
     NodeIncrementalBuildStats {
-        scanned_document_count: stats.scanned_document_count as u32,
-        new_document_count: stats.new_document_count as u32,
-        changed_document_count: stats.changed_document_count as u32,
-        unchanged_document_count: stats.unchanged_document_count as u32,
-        removed_document_count: stats.removed_document_count as u32,
-        active_document_count: stats.active_document_count as u32,
-        active_chunk_count: stats.active_chunk_count as u32,
+        scanned_document_count: stats.scanned_document_count as i64,
+        new_document_count: stats.new_document_count as i64,
+        changed_document_count: stats.changed_document_count as i64,
+        unchanged_document_count: stats.unchanged_document_count as i64,
+        removed_document_count: stats.removed_document_count as i64,
+        active_document_count: stats.active_document_count as i64,
+        active_chunk_count: stats.active_chunk_count as i64,
     }
 }
 

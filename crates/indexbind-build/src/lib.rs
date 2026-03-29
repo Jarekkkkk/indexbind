@@ -168,6 +168,12 @@ fn read_git_diff_update(root: &Path, base_revision: Option<String>) -> Result<Bu
             &mut changed,
             &mut removed,
         )?;
+        collect_git_name_status(
+            root,
+            &["diff", "--name-status", "-z", "--cached", "--", "."],
+            &mut changed,
+            &mut removed,
+        )?;
     } else {
         collect_git_name_status(
             root,
