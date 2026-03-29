@@ -58,6 +58,8 @@ Canonical bundles can currently be built with:
 - `hashing`
 - `model2vec`
 
+Use `model2vec` as the default recommended backend when you want the higher-quality retrieval path. Use `hashing` when you want a lighter compatibility-oriented backend or a smaller build dependency surface.
+
 For `model2vec`, the build step copies these files into the bundle:
 
 - `model/tokenizer.json`

@@ -130,6 +130,8 @@ await buildCanonicalBundle('./index.bundle', [
 });
 ```
 
+`model2vec` is the default recommended backend when you want the best retrieval quality from `indexbind`. `hashing` remains available as a lighter compatibility-oriented backend.
+
 ## Optional Incremental Build Cache
 
 If you rebuild the same local corpus repeatedly, keep a mutable cache and export fresh artifacts from it:

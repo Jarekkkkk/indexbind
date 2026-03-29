@@ -236,7 +236,7 @@ This keeps the long-term query engine portable without forcing every existing na
 
 ## model2vec And WASM
 
-The hardest part of web parity is not the retrieval logic. It is `model2vec`.
+The hardest part of web parity is not the retrieval logic. It is the current default high-quality backend: `model2vec`.
 
 Current native retrieval uses `model2vec-rs` for:
 
