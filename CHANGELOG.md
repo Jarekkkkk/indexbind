@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1
+
+- Fixed `indexbind/cloudflare` and `indexbind/web` bundle loading in real Cloudflare Worker deployments by separating the Worker wasm bootstrap from the generic web runtime and allowing hosts to provide an explicit bundle `fetch` implementation.
+- Added a deployable Cloudflare Worker manual testcase plus expanded smoke coverage for direct and virtual bundle loading modes.
+
 ## 0.3.0
 
 - Added YAML frontmatter ingestion for directory builds, including `title`, `summary`, `canonical_url`, and metadata extraction.
