@@ -10,24 +10,27 @@ Docs: [indexbind.jolestar.workers.dev](https://indexbind.jolestar.workers.dev)
 
 The release history is tracked in [CHANGELOG.md](./CHANGELOG.md).
 
-## What indexbind is
+## What It Is
 
 `indexbind` is an embedded retrieval library for fixed document sets.
 
-It is designed for products and workflows where:
+Use it when:
 
 - the document collection is known at build time
-- retrieval should ship with the product or artifact
-- the same search model should work across Node, browsers, and Workers
-- you do not want to depend on a hosted search service at query time
+- retrieval should ship with your product or artifact
+- the host application wants to control routing, filtering, and ranking policy
+- the same retrieval data should work across Node, browsers, and Workers
+- you do not want a hosted search dependency at query time
 
-## Design Constraints
+`indexbind` is not a hosted search service and not a turnkey knowledge-base product. It is a retrieval layer you embed into your own docs system, blog system, local tool, agent workflow, or publishing pipeline.
 
-- local-first
-- deterministic builds
-- library-first
-- artifact-first
-- simple enough to embed in other systems
+## Public Contract
+
+- build retrieval artifacts offline
+- open a native SQLite artifact in Node
+- open a canonical bundle in browsers, Workers, and Cloudflare Workers
+- keep results document-first, with chunk evidence in `bestMatch`
+- expose build and query APIs through a small library surface
 
 ## Install
 
@@ -37,21 +40,62 @@ Install the Node package:
 npm install indexbind
 ```
 
-On supported platforms, npm will also install the matching prebuilt native package automatically through `optionalDependencies`.
+On supported platforms, npm also installs the matching native package automatically through `optionalDependencies`.
 
-Supported prebuilt targets in the initial release:
+Current published prebuilt targets:
 
 - macOS arm64
 - macOS x64
 - Linux x64 (glibc)
 
-Windows native prebuilds are not included in the initial release. On Windows, use WSL and run `npm install indexbind` inside the WSL environment so the Linux x64 native package can be resolved there.
+Windows native prebuilds are not included yet. On Windows, use WSL or build from source in a Rust toolchain environment.
 
 If a prebuilt addon is unavailable for your platform, install from source in a Rust toolchain environment and run:
 
 ```bash
 npm run build:native:release
 ```
+
+## Start Quickly
+
+1. Build a native SQLite artifact for Node:
+
+```bash
+cargo run -p indexbind-build -- build ./docs ./index.sqlite
+```
+
+2. Query it from Node:
+
+```ts
+import { openIndex } from 'indexbind';
+
+const index = await openIndex('./index.sqlite');
+const hits = await index.search('rust guide');
+```
+
+3. Build a canonical bundle for browsers and Workers:
+
+```bash
+cargo run -p indexbind-build -- build-bundle ./docs ./index.bundle
+```
+
+4. Or keep a mutable build cache and export fresh artifacts from it:
+
+```bash
+cargo run -p indexbind-build -- update-cache ./docs ./.indexbind-cache.sqlite --git-diff
+cargo run -p indexbind-build -- export-artifact ./.indexbind-cache.sqlite ./index.sqlite
+```
+
+## Artifact Paths
+
+- Native SQLite artifact:
+  best fit for local Node retrieval
+- Canonical bundle:
+  best fit for browsers, Workers, and Cloudflare Workers
+- Incremental build cache:
+  best fit for repeated local rebuilds and host-controlled indexing workflows
+
+## Project Shape
 
 The project scope is deliberately narrow:
 
@@ -60,20 +104,13 @@ The project scope is deliberately narrow:
 - use local embedding models instead of hosted APIs
 - expose a small library API that other systems can embed
 
-## Goals
-
-- build indexes from deterministic document sets such as markdown repositories, docs folders, or exported knowledge bases
-- generate a portable artifact, preferably a single-file index or a similarly compact package
-- support local embedding generation with no required remote API dependency
-- make retrieval available through a small library surface, not only a standalone app
-- keep the output suitable for integration into CLIs, agents, local apps, and publishing systems
-
 ## Best Fit
 
 `indexbind` works best when you want to:
 
 - build search artifacts from a deterministic document set
 - embed retrieval into another product, CLI, or publishing system
+- index a local knowledge base while still owning the surrounding workflow
 - ship search without depending on a hosted search service
 - reuse the same retrieval model across Node, browsers, and Workers
 
@@ -90,22 +127,26 @@ The project scope is deliberately narrow:
 The easiest way to understand `indexbind` is by comparison:
 
 - `Pagefind` is optimized for static-site search as a packaged product. `indexbind` is a lower-level retrieval library you embed into your own site, app, CLI, or worker.
-- `qmd` is a local knowledge-base search product with its own indexing and workflow. `indexbind` is meant to be used as a retrieval engine inside another system. It also leaves you more room to pick a lighter embedding backend and let lexical retrieval, hybrid fusion, reranking, and product-specific ranking rules carry more of the retrieval stack.
+- `qmd` overlaps with `indexbind` on local knowledge-base search. The main difference is product boundary: `qmd` is closer to a ready-made local search product, while `indexbind` is closer to a retrieval engine you embed into your own system. If your host wants to own routing, filtering, ranking policy, and artifact distribution, `indexbind` is usually the better fit.
 - `Meilisearch` is a hosted or self-hosted search service. `indexbind` avoids the service boundary by building an artifact offline and opening it locally at runtime.
 
-That makes `indexbind` a good fit for doc systems, local tools, publishing pipelines, and agent-facing products that want a reusable retrieval layer.
+That makes `indexbind` a good fit for doc systems, local tools, local knowledge bases with host-defined workflow, publishing pipelines, and agent-facing products that want a reusable retrieval layer.
 
-## Documentation
+## Documentation Paths
 
-- [Documentation site](https://indexbind.jolestar.workers.dev)
-- [Choosing indexbind](./docs/site/guides/choosing-indexbind.md)
+Use the docs by task:
+
 - [Getting Started](./docs/site/guides/getting-started.md)
-- [Search Quality Controls](./docs/site/guides/search-quality-controls.md)
-- [Web and Cloudflare](./docs/site/guides/web-and-cloudflare.md)
-- [Canonical Bundles](./docs/site/concepts/canonical-bundles.md)
-- [Runtime Model](./docs/site/concepts/runtime-model.md)
+- [Choosing indexbind](./docs/site/guides/choosing-indexbind.md)
 - [API Reference](./docs/site/reference/api.md)
 - [CLI Reference](./docs/site/reference/cli.md)
+- [Web and Cloudflare](./docs/site/guides/web-and-cloudflare.md)
+- [Packaging](./docs/site/reference/packaging.md)
+- [Search Quality Controls](./docs/site/guides/search-quality-controls.md)
+
+## Documentation Site
+
+- [Documentation site](https://indexbind.jolestar.workers.dev)
 - [Architecture](./docs/site/concepts/canonical-artifact-and-wasm.md)
 - [Documentation site source](./docs/site)
 

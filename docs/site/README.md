@@ -10,24 +10,25 @@ summary: Embedded retrieval artifacts for Node, browsers, and Workers.
 
 `indexbind` is a retrieval library for fixed document sets.
 
-It builds an artifact offline, then opens that artifact locally in Node, browsers, Web Workers, or Cloudflare Workers.
+It builds retrieval artifacts offline, then opens them locally in Node, browsers, Web Workers, or Cloudflare Workers.
 
 If you want the shortest path, start with [Getting Started](./guides/getting-started.md). If you first need to decide whether `indexbind` is the right tool, read [Choosing indexbind](./guides/choosing-indexbind.md).
 
-## Why It Exists
+## What It Optimizes For
 
 Most search infrastructure is designed around services, crawlers, or runtime-managed indexes.
 
 `indexbind` takes a different position:
 
 - the document set is fixed at build time
-- the artifact is deterministic and portable
+- the retrieval artifact is deterministic and portable
 - the runtime API is small enough to embed into another product
 - the same retrieval model can work in Node, browsers, and Workers
+- the host application can still own routing, filtering, and ranking policy
 
-That makes it a better fit for docs systems, local tools, static deployments, and products such as [`mdorigin`](https://mdorigin.jolestar.workers.dev), where embedded retrieval is part of a larger publishing flow.
+That makes it a better fit for docs systems, local tools, local knowledge bases with host-defined workflow, static deployments, and products such as [`mdorigin`](https://mdorigin.jolestar.workers.dev), where embedded retrieval is part of a larger publishing flow.
 
-## Choose the Right Tool
+## Choose The Right Tool
 
 `indexbind` is a better fit when you need an embedded retrieval layer. It is not trying to be:
 
@@ -37,20 +38,40 @@ That makes it a better fit for docs systems, local tools, static deployments, an
 
 If that decision is still unclear, go to [Choosing indexbind](./guides/choosing-indexbind.md).
 
-## What It Does
+## Main Paths
 
 - builds deterministic retrieval artifacts from a document collection
 - supports a native SQLite artifact for Node
 - supports a canonical file bundle for web and worker runtimes
 - provides a Node build API and query APIs for Node, web, and Cloudflare
+- supports an incremental build cache with fresh export to artifacts and bundles
 - keeps search as an embeddable library concern rather than a hosted service
 
-## Start Here
+## Start By Need
 
-Use the docs by task:
+- Want the shortest end-to-end path:
+  [Getting Started](./guides/getting-started.md)
+- Want to decide whether it fits better than Pagefind, qmd, or Meilisearch:
+  [Choosing indexbind](./guides/choosing-indexbind.md)
+- Want to integrate from code:
+  [API](./reference/api.md)
+- Want to drive builds from the CLI:
+  [CLI](./reference/cli.md)
+- Want browser or Worker usage:
+  [Web and Cloudflare](./guides/web-and-cloudflare.md)
+- Want to understand packaging and artifact shapes:
+  [Packaging](./reference/packaging.md)
 
-- [Choosing indexbind](./guides/choosing-indexbind.md)
+## Current Platform Support
+
+- Native prebuilds are published for macOS arm64, macOS x64, and Linux x64 (glibc).
+- Windows native prebuilds are not published yet.
+- Canonical bundle runtimes work across browsers, Workers, and Cloudflare Workers.
+
+## Docs Map
+
 - [Getting Started](./guides/getting-started.md)
+- [Choosing indexbind](./guides/choosing-indexbind.md)
 - [Search Quality Controls](./guides/search-quality-controls.md)
 - [Web and Cloudflare](./guides/web-and-cloudflare.md)
 - [API](./reference/api.md)

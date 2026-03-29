@@ -21,6 +21,7 @@ Choose `indexbind` when you want to:
 - keep the build step deterministic
 - ship retrieval as part of your own CLI, site, app, or worker
 - reuse the same retrieval behavior across Node and web runtimes
+- keep a local knowledge base searchable while still owning the surrounding workflow
 - avoid a runtime dependency on a hosted search API
 
 Common examples:
@@ -48,7 +49,9 @@ Use `indexbind` when search is one part of a larger system and you want to contr
 
 ### `indexbind` vs `qmd`
 
-Use `qmd` when you want an opinionated local knowledge-base search product.
+`qmd` overlaps with `indexbind` on local knowledge-base search.
+
+Use `qmd` when you want an opinionated local knowledge-base search product with more built-in workflow and local-store behavior.
 
 Use `indexbind` when you are building your own product and want an embeddable retrieval layer rather than a full end-user workflow.
 

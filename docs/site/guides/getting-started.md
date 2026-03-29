@@ -14,6 +14,7 @@ This guide takes the shortest full path:
 3. query it from Node
 4. build a canonical bundle from the same documents
 5. query that bundle from the web runtime
+6. see the incremental cache path for repeated local rebuilds
 
 ## Install
 
@@ -127,6 +128,22 @@ await buildCanonicalBundle('./index.bundle', [
 });
 ```
 
+## Optional Incremental Build Cache
+
+If you rebuild the same local corpus repeatedly, keep a mutable cache and export fresh artifacts from it:
+
+```bash
+cargo run -p indexbind-build -- update-cache ./docs ./.indexbind-cache.sqlite --git-diff
+cargo run -p indexbind-build -- export-artifact ./.indexbind-cache.sqlite ./index.sqlite
+cargo run -p indexbind-build -- export-bundle ./.indexbind-cache.sqlite ./index.bundle
+```
+
+Use this path when:
+
+- the corpus is mostly stable
+- you are iterating on local content repeatedly
+- a host application or script wants to trigger rebuilds incrementally
+
 ## Query the Bundle in Web Runtimes
 
 ```ts
@@ -144,6 +161,7 @@ Use the canonical bundle when you want the same retrieval data to work in browse
 
 - Use the native SQLite artifact for local Node retrieval.
 - Use the canonical bundle for browser and worker runtimes.
+- Use the incremental build cache when you want repeated local rebuilds without treating the runtime artifact itself as mutable.
 - If your product spans both environments, build both from the same document set.
 
 ## Inspect and Benchmark
