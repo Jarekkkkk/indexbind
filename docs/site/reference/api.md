@@ -90,10 +90,15 @@ The returned hits include:
 
 ## `indexbind/build`
 
-Programmatic canonical bundle build API:
+Programmatic build and incremental cache API:
 
 ```ts
-import { buildCanonicalBundle } from 'indexbind/build';
+import {
+  buildCanonicalBundle,
+  updateBuildCache,
+  exportArtifactFromBuildCache,
+  exportCanonicalBundleFromBuildCache,
+} from 'indexbind/build';
 ```
 
 Main input shape:
@@ -107,7 +112,51 @@ Main input shape:
 - `content`
 - `metadata?`
 
-Use this entrypoint when your host application already has a normalized document set and wants to build a canonical bundle directly.
+Use this entrypoint when your host application already has a normalized document set and wants to build directly from code instead of scanning a directory through the CLI.
+
+Available helpers:
+
+- `buildCanonicalBundle(outputDir, documents, options?)`
+- `updateBuildCache(cachePath, documents, options?, removedRelativePaths?)`
+- `exportArtifactFromBuildCache(cachePath, outputPath)`
+- `exportCanonicalBundleFromBuildCache(cachePath, outputDir)`
+
+`updateBuildCache(...)` returns:
+
+- `scannedDocumentCount`
+- `newDocumentCount`
+- `changedDocumentCount`
+- `unchangedDocumentCount`
+- `removedDocumentCount`
+- `activeDocumentCount`
+- `activeChunkCount`
+
+Typical incremental flow:
+
+```ts
+import {
+  updateBuildCache,
+  exportArtifactFromBuildCache,
+  exportCanonicalBundleFromBuildCache,
+} from 'indexbind/build';
+
+await updateBuildCache(
+  './.indexbind-cache.sqlite',
+  [
+    {
+      relativePath: 'guides/rust.md',
+      title: 'Rust Guide',
+      content: '# Rust Guide\n\nRust retrieval guide.',
+      metadata: { lang: 'rust' },
+    },
+  ],
+  { embeddingBackend: 'hashing' },
+  ['guides/old.md'],
+);
+
+await exportArtifactFromBuildCache('./.indexbind-cache.sqlite', './index.sqlite');
+await exportCanonicalBundleFromBuildCache('./.indexbind-cache.sqlite', './index.bundle');
+```
 
 ## `indexbind/web`
 

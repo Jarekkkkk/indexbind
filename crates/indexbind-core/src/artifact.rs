@@ -153,7 +153,7 @@ pub fn build_artifact(
     })
 }
 
-fn initialize_schema(connection: &Connection) -> Result<()> {
+pub(crate) fn initialize_schema(connection: &Connection) -> Result<()> {
     connection.execute_batch(
         "
         PRAGMA journal_mode = WAL;

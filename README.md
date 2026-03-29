@@ -90,7 +90,7 @@ The project scope is deliberately narrow:
 The easiest way to understand `indexbind` is by comparison:
 
 - `Pagefind` is optimized for static-site search as a packaged product. `indexbind` is a lower-level retrieval library you embed into your own site, app, CLI, or worker.
-- `qmd` is a local knowledge-base search product with its own indexing and workflow. `indexbind` is meant to be used as a retrieval engine inside another system.
+- `qmd` is a local knowledge-base search product with its own indexing and workflow. `indexbind` is meant to be used as a retrieval engine inside another system. It also leaves you more room to pick a lighter embedding backend and let lexical retrieval, hybrid fusion, reranking, and product-specific ranking rules carry more of the retrieval stack.
 - `Meilisearch` is a hosted or self-hosted search service. `indexbind` avoids the service boundary by building an artifact offline and opening it locally at runtime.
 
 That makes `indexbind` a good fit for doc systems, local tools, publishing pipelines, and agent-facing products that want a reusable retrieval layer.

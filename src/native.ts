@@ -126,6 +126,21 @@ export interface NativeCanonicalBuildStats {
   vectorDimensions: number;
 }
 
+export interface NativeBuildStats {
+  documentCount: number;
+  chunkCount: number;
+}
+
+export interface NativeIncrementalBuildStats {
+  scannedDocumentCount: number;
+  newDocumentCount: number;
+  changedDocumentCount: number;
+  unchangedDocumentCount: number;
+  removedDocumentCount: number;
+  activeDocumentCount: number;
+  activeChunkCount: number;
+}
+
 export interface NativeSearchOptions {
   topK?: number;
   hybrid?: boolean;
@@ -157,6 +172,17 @@ export interface NativeModule {
     outputDir: string,
     documents: NativeBuildDocument[],
     options?: NativeBuildOptions,
+  ): NativeCanonicalBuildStats;
+  updateBuildCacheFromDocuments(
+    cachePath: string,
+    documents: NativeBuildDocument[],
+    removedRelativePaths?: string[],
+    options?: NativeBuildOptions,
+  ): NativeIncrementalBuildStats;
+  exportArtifactFromCache(cachePath: string, outputPath: string): NativeBuildStats;
+  exportCanonicalBundleFromCache(
+    cachePath: string,
+    outputDir: string,
   ): NativeCanonicalBuildStats;
 }
 
