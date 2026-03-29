@@ -195,13 +195,13 @@ jobs:
 
     steps:
       - name: Download root tarball artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           name: npm-root-tarball
           path: release/assets
 
       - name: Download native tarball artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           pattern: native-tarball-*
           path: release/assets
@@ -228,14 +228,21 @@ jobs:
           EOF
 
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ needs.verify.outputs.release_version }}
-          generate_release_notes: true
-          body_path: release-notes.md
-          files: |
-            release/assets/*.tgz
-            release/assets/SHA256SUMS.txt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            "repos/${GITHUB_REPOSITORY}/releases" \
+            -f tag_name="v${{ needs.verify.outputs.release_version }}" \
+            -F generate_release_notes=true \
+            -f body="$(cat release-notes.md)"
+
+          gh release upload "v${{ needs.verify.outputs.release_version }}" \
+            release/assets/*.tgz \
+            release/assets/SHA256SUMS.txt \
+            --repo "${GITHUB_REPOSITORY}"
 
       - name: Setup Node for npm publish
         uses: actions/setup-node@v6

@@ -12,8 +12,8 @@ description = "CLI and build helpers for generating indexbind artifacts."
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-serde_yaml.workspace = true
 walkdir.workspace = true
+yaml-rust2.workspace = true
 indexbind-core = { path = "../indexbind-core" }
 
 [[bin]]
