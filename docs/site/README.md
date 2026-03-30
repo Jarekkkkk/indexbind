@@ -107,7 +107,7 @@ npm run docs:dev
 - [Reference](./reference/)
   <!-- mdorigin:index kind=directory -->
 
-- [skills](./skills/)
+- [Skills](./skills/)
   <!-- mdorigin:index kind=directory -->
 
 <!-- INDEX:END -->
