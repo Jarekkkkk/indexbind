@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 
 const repoRoot = process.cwd();
 const nodeCommand = process.execPath;
@@ -26,9 +27,49 @@ fs.mkdirSync(docsDir, { recursive: true });
 fs.writeFileSync(path.join(docsDir, 'rust.md'), '# Rust Guide\n\nRust retrieval guide for local search.\n');
 
 runCli(['build', docsDir, artifactPath, 'hashing']);
-const searchResult = JSON.parse(captureCli(['search', artifactPath, '--', '--help']));
-if (searchResult.query !== '--help') {
-  throw new Error(`Expected literal query --help, got ${JSON.stringify(searchResult)}`);
+const searchResult = JSON.parse(
+  captureCli(['search', artifactPath, 'rust guide', '--mode', 'vector', '--top-k', '1']),
+);
+if (searchResult.options?.mode !== 'vector') {
+  throw new Error(`Expected vector mode search output, got ${JSON.stringify(searchResult)}`);
+}
+
+const literalQueryResult = JSON.parse(captureCli(['search', artifactPath, '--', '--help']));
+if (literalQueryResult.query !== '--help') {
+  throw new Error(`Expected literal query --help, got ${JSON.stringify(literalQueryResult)}`);
+}
+
+assertFailure(
+  ['search', artifactPath, 'rust guide', '--hybrid', 'true'],
+  'The --hybrid flag has been removed.',
+);
+
+if (searchResult.query !== 'rust guide') {
+  throw new Error(`Expected search query rust guide, got ${JSON.stringify(searchResult)}`);
+}
+
+const { openIndex } = await import(pathToFileURL(path.join(repoRoot, 'dist/index.js')).href);
+const index = await openIndex(artifactPath);
+const apiHits = await index.search('rust guide', { mode: 'vector' });
+if (!apiHits[0] || apiHits[0].relativePath !== 'rust.md') {
+  throw new Error(`Expected vector mode API search hit, got ${JSON.stringify(apiHits)}`);
+}
+
+let sawLegacyHybridError = false;
+try {
+  await index.search('rust guide', { hybrid: true });
+} catch (error) {
+  if (
+    error instanceof Error &&
+    error.message.includes('Search option "hybrid" has been removed.')
+  ) {
+    sawLegacyHybridError = true;
+  } else {
+    throw error;
+  }
+}
+if (!sawLegacyHybridError) {
+  throw new Error('Expected Node API to reject the legacy hybrid option');
 }
 
 assertFailure([], 'usage:');
@@ -82,6 +123,7 @@ function captureCli(args) {
 
   return result.stdout.trim();
 }
+
 
 function assertFailure(args, expectedText) {
   const result = spawnSync(nodeCommand, [cliPath, ...args], {

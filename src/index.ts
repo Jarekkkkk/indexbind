@@ -17,7 +17,7 @@ export type JsonValue =
 
 export interface SearchOptions {
   topK?: number;
-  hybrid?: boolean;
+  mode?: 'hybrid' | 'vector';
   minScore?: number;
   reranker?: RerankerOptions;
   relativePathPrefix?: string;
@@ -82,9 +82,10 @@ export class Index {
   }
 
   async search(query: string, options: SearchOptions = {}): Promise<DocumentHit[]> {
+    assertNoLegacyHybridOption(options);
     const nativeOptions: NativeSearchOptions = {
       topK: options.topK,
-      hybrid: options.hybrid,
+      mode: options.mode,
       minScore: options.minScore,
       reranker: options.reranker,
       relativePathPrefix: options.relativePathPrefix,
@@ -97,6 +98,14 @@ export class Index {
 
 export function openIndex(artifactPath: string): Promise<Index> {
   return Index.open(artifactPath);
+}
+
+function assertNoLegacyHybridOption(options: SearchOptions): void {
+  if (Object.prototype.hasOwnProperty.call(options, 'hybrid')) {
+    throw new Error(
+      'Search option "hybrid" has been removed. Use mode: "hybrid" or mode: "vector" instead.',
+    );
+  }
 }
 
 function mapArtifactInfo(info: NativeArtifactInfo): ArtifactInfo {

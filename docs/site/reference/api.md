@@ -24,7 +24,7 @@ import { openIndex } from 'indexbind';
 const index = await openIndex('./index.sqlite');
 const hits = await index.search('rust guide', {
   topK: 5,
-  hybrid: true,
+  mode: 'hybrid',
   reranker: { kind: 'embedding-v1', candidatePoolSize: 25 },
   relativePathPrefix: 'guides/',
 });
@@ -51,7 +51,7 @@ Returns artifact metadata such as:
 Main options:
 
 - `topK?`: number of hits to return
-- `hybrid?`: combine lexical and vector retrieval
+- `mode?`: `'hybrid'` or `'vector'`
 - `minScore?`: prune low-confidence tail hits after final scoring
 - `reranker?`: optional final reranking stage
 - `relativePathPrefix?`: restrict retrieval to a path subtree
@@ -215,7 +215,7 @@ Reasonable starting point:
 ```ts
 const hits = await index.search(query, {
   topK: 10,
-  hybrid: true,
+  mode: 'hybrid',
   reranker: {
     kind: 'embedding-v1',
     candidatePoolSize: 25,
@@ -252,5 +252,7 @@ const hits = await index.search(query, {
   minScore: 0.05,
 });
 ```
+
+`mode: 'vector'` means vector-only retrieval. A lexical-only mode is not available yet.
 
 For a fuller explanation of how these knobs interact, see [Search Quality Controls](../guides/search-quality-controls.md).

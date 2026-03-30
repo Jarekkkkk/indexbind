@@ -37,7 +37,7 @@ Observed local baseline:
 | Build command | `npx indexbind build docs/site <tmp>/docs-site.sqlite hashing` |
 | Build time | `0.07s` |
 | Artifact size | `352 KB` |
-| Query sample | 25 local Node searches with `hybrid: true` and `heuristic-v1` reranking |
+| Query sample | 25 local Node searches with `mode: 'hybrid'` and `heuristic-v1` reranking |
 | Average query latency | `3.61 ms` |
 | Min / max query latency | `2.51 ms` / `5.28 ms` |
 

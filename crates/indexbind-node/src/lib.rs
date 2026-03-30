@@ -20,7 +20,7 @@ use std::sync::Mutex;
 #[napi(object)]
 pub struct NodeSearchOptions {
     pub top_k: Option<u32>,
-    pub hybrid: Option<bool>,
+    pub mode: Option<String>,
     pub min_score: Option<f64>,
     pub reranker: Option<NodeRerankerOptions>,
     pub relative_path_prefix: Option<String>,
@@ -194,10 +194,15 @@ impl NativeIndex {
             .map_err(|error| Error::from_reason(error.to_string()))?;
         let options = SearchOptions {
             top_k: options.as_ref().and_then(|value| value.top_k).unwrap_or(10) as usize,
-            hybrid: options
-                .as_ref()
-                .and_then(|value| value.hybrid)
-                .unwrap_or(true),
+            mode: match options.as_ref().and_then(|value| value.mode.as_deref()) {
+                Some("hybrid") | None => indexbind_core::RetrievalMode::Hybrid,
+                Some("vector") => indexbind_core::RetrievalMode::Vector,
+                Some(other) => {
+                    return Err(Error::from_reason(format!(
+                        "unsupported retrieval mode: {other}"
+                    )))
+                }
+            },
             min_score: options
                 .as_ref()
                 .and_then(|value| value.min_score)

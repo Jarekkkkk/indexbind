@@ -300,7 +300,7 @@ function parseSearchCommandArgs(args: string[]): {
   const positional: string[] = [];
   const metadata: Record<string, string> = {};
   let topK: number | undefined;
-  let hybrid: boolean | undefined;
+  let mode: 'hybrid' | 'vector' | undefined;
   let minScore: number | undefined;
   let rerankerKind: 'embedding-v1' | 'heuristic-v1' | undefined;
   let candidatePoolSize: number | undefined;
@@ -318,10 +318,14 @@ function parseSearchCommandArgs(args: string[]): {
         topK = parseIntegerFlag('--top-k', args[index + 1]);
         index += 1;
         break;
-      case '--hybrid':
-        hybrid = parseBooleanFlag('--hybrid', args[index + 1]);
+      case '--mode':
+        mode = parseMode(args[index + 1]);
         index += 1;
         break;
+      case '--hybrid':
+        throw new Error(
+          'The --hybrid flag has been removed. Use --mode hybrid or --mode vector instead.',
+        );
       case '--min-score':
         minScore = parseFloatFlag('--min-score', args[index + 1]);
         index += 1;
@@ -371,7 +375,7 @@ function parseSearchCommandArgs(args: string[]): {
 
   const options: SearchOptions = {
     topK,
-    hybrid,
+    mode,
     minScore,
     relativePathPrefix,
   };
@@ -410,17 +414,6 @@ function parseBuildOptions(backend: string | undefined) {
   return { embeddingBackend: 'model2vec' as const, model: backend };
 }
 
-function parseBooleanFlag(flag: string, value: string | undefined): boolean {
-  const normalized = requireFlagValue(flag, value);
-  if (normalized === 'true') {
-    return true;
-  }
-  if (normalized === 'false') {
-    return false;
-  }
-  throw new Error(`${flag} requires true or false`);
-}
-
 function parseIntegerFlag(flag: string, value: string | undefined): number {
   const parsed = Number(requireFlagValue(flag, value));
   if (!Number.isInteger(parsed)) {
@@ -443,6 +436,14 @@ function parseReranker(value: string | undefined): 'embedding-v1' | 'heuristic-v
     return reranker;
   }
   throw new Error(`unsupported reranker kind: ${reranker}`);
+}
+
+function parseMode(value: string | undefined): 'hybrid' | 'vector' {
+  const mode = requireFlagValue('--mode', value);
+  if (mode === 'hybrid' || mode === 'vector') {
+    return mode;
+  }
+  throw new Error(`unsupported retrieval mode: ${mode}`);
 }
 
 function requireFlagValue(flag: string, value: string | undefined): string {
@@ -490,7 +491,7 @@ function emit(outputMode: OutputMode, jsonValue: unknown, textValue: string): vo
 function normalizeSearchOptions(options: SearchOptions): SearchOptions {
   return {
     topK: options.topK ?? 10,
-    hybrid: options.hybrid ?? true,
+    mode: options.mode ?? 'hybrid',
     ...(options.minScore !== undefined ? { minScore: options.minScore } : {}),
     ...(options.reranker
       ? {
@@ -577,7 +578,7 @@ function benchmarkUsage(): string {
 }
 
 function searchUsage(): string {
-  return 'indexbind search <artifact-file> <query> [--top-k <n>] [--hybrid true|false] [--reranker <kind>] [--candidate-pool-size <n>] [--relative-path-prefix <prefix>] [--metadata key=value] [--score-adjust-metadata-multiplier <field>] [--min-score <float>] [--text]';
+  return 'indexbind search <artifact-file> <query> [--top-k <n>] [--mode <hybrid|vector>] [--reranker <kind>] [--candidate-pool-size <n>] [--relative-path-prefix <prefix>] [--metadata key=value] [--score-adjust-metadata-multiplier <field>] [--min-score <float>] [--text]';
 }
 
 await main();

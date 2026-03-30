@@ -26,7 +26,8 @@ pub struct ArtifactInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchOptions {
     pub top_k: usize,
-    pub hybrid: bool,
+    #[serde(default)]
+    pub mode: RetrievalMode,
     pub candidate_multiplier: usize,
     #[serde(default)]
     pub min_score: Option<f32>,
@@ -38,6 +39,14 @@ pub struct SearchOptions {
     pub metadata: MetadataMap,
     #[serde(default)]
     pub score_adjustment: Option<ScoreAdjustmentOptions>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum RetrievalMode {
+    #[default]
+    Hybrid,
+    Vector,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -78,7 +87,7 @@ impl Default for SearchOptions {
     fn default() -> Self {
         Self {
             top_k: 10,
-            hybrid: true,
+            mode: RetrievalMode::Hybrid,
             candidate_multiplier: 8,
             min_score: None,
             reranker: None,
@@ -156,7 +165,7 @@ impl Retriever {
             .next()
             .unwrap_or_default();
         let vector_docs = self.rank_documents_by_vector(&query_embedding, limit, &allowed_doc_ids);
-        let lexical_docs = if options.hybrid {
+        let lexical_docs = if options.mode == RetrievalMode::Hybrid {
             self.rank_documents_by_lexical(query, limit, &allowed_doc_ids)?
         } else {
             Vec::new()
@@ -713,8 +722,8 @@ fn build_fts_query(input: &str) -> Option<String> {
 mod tests {
     use super::{
         rerank_documents_with_embeddings, rerank_documents_with_heuristic, BestMatch, DocumentHit,
-        finalize_hits, RerankerKind, RerankerOptions, Retriever, ScoreAdjustmentOptions,
-        SearchOptions,
+        finalize_hits, RetrievalMode, RerankerKind, RerankerOptions, Retriever,
+        ScoreAdjustmentOptions, SearchOptions,
     };
     use crate::artifact::build_artifact;
     use crate::build::BuildArtifactOptions;
@@ -1057,7 +1066,7 @@ mod tests {
             .search(
                 "calling layer",
                 SearchOptions {
-                    hybrid: true,
+                    mode: RetrievalMode::Hybrid,
                     reranker: Some(RerankerOptions {
                         kind: RerankerKind::HeuristicV1,
                         candidate_pool_size: 10,
@@ -1128,7 +1137,7 @@ mod tests {
                 SearchOptions {
                     top_k: 1,
                     candidate_multiplier: 8,
-                    hybrid: true,
+                    mode: RetrievalMode::Hybrid,
                     score_adjustment: Some(ScoreAdjustmentOptions {
                         metadata_numeric_multiplier: Some("directory_weight".to_string()),
                     }),

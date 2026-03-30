@@ -15,17 +15,25 @@ summary: Understand which search options affect recall, reranking, filtering, an
 
 ## Recall Controls
 
-### `hybrid`
+### `mode`
 
 ```ts
 const hits = await index.search('rust guide', {
-  hybrid: true,
+  mode: 'hybrid',
 });
 ```
 
-`hybrid: true` combines vector and lexical retrieval before the final ranked list is built.
+`mode: 'hybrid'` combines vector and lexical retrieval before the final ranked list is built.
 
 Use it when you want a safer default across exact matches and semantic matches.
+
+```ts
+const hits = await index.search('rust guide', {
+  mode: 'vector',
+});
+```
+
+`mode: 'vector'` means vector-only retrieval. There is no lexical-only mode yet.
 
 ### `relativePathPrefix`
 
@@ -147,7 +155,7 @@ For many embedded products, a good starting point is:
 ```ts
 const hits = await index.search(query, {
   topK: 10,
-  hybrid: true,
+  mode: 'hybrid',
   reranker: {
     kind: 'embedding-v1',
     candidatePoolSize: 25,
