@@ -34,7 +34,7 @@ Observed local baseline:
 
 | Metric | Value |
 | --- | --- |
-| Build command | `target/debug/indexbind-build build docs/site <tmp>/docs-site.sqlite hashing` |
+| Build command | `npx indexbind build docs/site <tmp>/docs-site.sqlite hashing` |
 | Build time | `0.07s` |
 | Artifact size | `352 KB` |
 | Query sample | 25 local Node searches with `hybrid: true` and `heuristic-v1` reranking |

@@ -10,6 +10,6 @@ Current layout:
 Example:
 
 ```bash
-cargo run -p indexbind-build -- build fixtures/benchmark/basic/docs /tmp/indexbind-basic.sqlite hashing
-cargo run -p indexbind-build -- benchmark /tmp/indexbind-basic.sqlite fixtures/benchmark/basic/queries.json
+npx indexbind build fixtures/benchmark/basic/docs /tmp/indexbind-basic.sqlite hashing
+npx indexbind benchmark /tmp/indexbind-basic.sqlite fixtures/benchmark/basic/queries.json
 ```

@@ -36,16 +36,18 @@
 
 ## Important Commands
 
-- Build native addon and TS wrapper:
+- Build native addon, TS wrapper, and public CLI:
   - `npm run build`
+- Build the native addon and TS CLI without wasm:
+  - `npm run build:cli`
 - TypeScript and Rust checks:
   - `npm run check`
 - Rust tests:
   - `cargo test --workspace`
 - Build an artifact:
-  - `cargo run -p indexbind-build -- build ./docs ./index.sqlite`
+  - `npx indexbind build ./docs ./index.sqlite`
 - Inspect an artifact:
-  - `cargo run -p indexbind-build -- inspect ./index.sqlite`
+  - `npx indexbind inspect ./index.sqlite`
 - Run bundled retrieval regression fixture:
   - `npm run benchmark:basic`
 

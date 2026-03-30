@@ -186,8 +186,6 @@ npx indexbind inspect ./index.sqlite
 npx indexbind inspect ./index.sqlite --text
 ```
 
-The Rust `indexbind-build` binary still exists for Rust-native workflows, but the npm package now ships the public `indexbind` CLI.
-
 Run the bundled regression fixture:
 
 ```bash

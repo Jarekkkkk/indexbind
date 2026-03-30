@@ -93,8 +93,6 @@ npx indexbind update-cache ./docs ./.indexbind-cache.sqlite --git-diff
 npx indexbind export-artifact ./.indexbind-cache.sqlite ./index.sqlite
 ```
 
-The npm package now includes the public CLI. Rust users can still run the original `indexbind-build` binary directly.
-
 CLI commands print JSON by default. Add `--text` when you want scan-friendly terminal output.
 
 ## Artifact Paths
