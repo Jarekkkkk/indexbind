@@ -578,7 +578,7 @@ function benchmarkUsage(): string {
 }
 
 function searchUsage(): string {
-  return 'indexbind search <artifact-file> <query> [--top-k <n>] [--mode <hybrid|vector>] [--reranker <kind>] [--candidate-pool-size <n>] [--relative-path-prefix <prefix>] [--metadata key=value] [--score-adjust-metadata-multiplier <field>] [--min-score <float>] [--text]';
+  return 'usage: indexbind search <artifact-file> <query> [--top-k <n>] [--mode <hybrid|vector>] [--reranker <kind>] [--candidate-pool-size <n>] [--relative-path-prefix <prefix>] [--metadata key=value] [--score-adjust-metadata-multiplier <field>] [--min-score <float>] [--text]';
 }
 
 await main();

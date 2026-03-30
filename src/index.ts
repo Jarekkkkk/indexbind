@@ -101,7 +101,7 @@ export function openIndex(artifactPath: string): Promise<Index> {
 }
 
 function assertNoLegacyHybridOption(options: SearchOptions): void {
-  if (Object.prototype.hasOwnProperty.call(options, 'hybrid')) {
+  if (options && typeof options === 'object' && Object.prototype.hasOwnProperty.call(options, 'hybrid')) {
     throw new Error(
       'Search option "hybrid" has been removed. Use mode: "hybrid" or mode: "vector" instead.',
     );
