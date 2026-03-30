@@ -1,11 +1,18 @@
 ---
 name: indexbind
+version: 1.0.0
 description: Use when an agent needs to install or use indexbind from Node, browsers, Web Workers, or Cloudflare Workers. This skill helps choose the right package, CLI, artifact, and entrypoint, and points to the live markdown docs for details.
 ---
 
 # Indexbind
 
 Use this skill when the task is about using `indexbind` from a host application or environment.
+
+## Usage examples
+
+- "Use `indexbind` to add local search to a docs folder."
+- "Help me choose between `indexbind`, `indexbind/web`, and `indexbind/cloudflare`."
+- "Show me how to build a SQLite artifact for Node and a bundle for Workers."
 
 ## Install
 
