@@ -121,6 +121,25 @@ Use it for host-defined ranking priors such as:
 
 This is intentionally generic. `indexbind` does not define what the metadata field means.
 
+### `minScore`
+
+```ts
+const hits = await index.search('rust guide', {
+  topK: 10,
+  minScore: 0.05,
+});
+```
+
+This drops low-scoring tail hits after reranking and score adjustment.
+
+Use it when you want:
+
+- fewer weak semantic neighbors in the tail
+- fewer than `topK` hits when confidence is low
+- a stable cutoff for a fixed retrieval profile
+
+`minScore` is most useful when your index, embedding backend, reranker choice, and score-adjustment profile are fixed. Treat it as a profile-tuned tail cutoff, not a universal confidence value across every retrieval configuration.
+
 ## Recommended Defaults
 
 For many embedded products, a good starting point is:
@@ -137,6 +156,8 @@ const hits = await index.search(query, {
 ```
 
 Then layer on `metadata` filters and `scoreAdjustment` only when your host application has clear product rules that should influence ranking.
+
+Add `minScore` once you have a stable search profile and want to trim weak tail matches.
 
 ## What These Knobs Do Not Solve
 

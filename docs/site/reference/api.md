@@ -52,6 +52,7 @@ Main options:
 
 - `topK?`: number of hits to return
 - `hybrid?`: combine lexical and vector retrieval
+- `minScore?`: prune low-confidence tail hits after final scoring
 - `reranker?`: optional final reranking stage
 - `relativePathPrefix?`: restrict retrieval to a path subtree
 - `metadata?`: exact-match metadata filter
@@ -240,6 +241,15 @@ const hits = await index.search(query, {
   scoreAdjustment: {
     metadataNumericMultiplier: 'directory_weight',
   },
+});
+```
+
+Use `minScore` when your product wants to cut weak tail matches and allow fewer than `topK` hits:
+
+```ts
+const hits = await index.search(query, {
+  topK: 10,
+  minScore: 0.05,
 });
 ```
 

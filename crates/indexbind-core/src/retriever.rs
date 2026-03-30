@@ -29,6 +29,8 @@ pub struct SearchOptions {
     pub hybrid: bool,
     pub candidate_multiplier: usize,
     #[serde(default)]
+    pub min_score: Option<f32>,
+    #[serde(default)]
     pub reranker: Option<RerankerOptions>,
     #[serde(default)]
     pub relative_path_prefix: Option<String>,
@@ -78,6 +80,7 @@ impl Default for SearchOptions {
             top_k: 10,
             hybrid: true,
             candidate_multiplier: 8,
+            min_score: None,
             reranker: None,
             relative_path_prefix: None,
             metadata: BTreeMap::new(),
@@ -165,37 +168,31 @@ impl Retriever {
             options.reranker.as_ref(),
             final_candidate_limit,
         )?;
-        Ok(apply_score_adjustment(
+        Ok(finalize_hits(
             reranked,
             options.score_adjustment.as_ref(),
+            options.min_score,
             options.top_k,
         ))
     }
 }
 
-fn apply_score_adjustment(
+fn finalize_hits(
     mut hits: Vec<DocumentHit>,
     config: Option<&ScoreAdjustmentOptions>,
+    min_score: Option<f32>,
     top_k: usize,
 ) -> Vec<DocumentHit> {
-    let Some(config) = config else {
-        hits.truncate(top_k);
-        return hits;
-    };
-
-    let Some(field) = config.metadata_numeric_multiplier.as_deref() else {
-        hits.truncate(top_k);
-        return hits;
-    };
-
-    for hit in &mut hits {
-        let multiplier = hit
-            .metadata
-            .get(field)
-            .and_then(Value::as_f64)
-            .filter(|value| value.is_finite() && *value > 0.0)
-            .unwrap_or(1.0) as f32;
-        hit.score *= multiplier;
+    if let Some(field) = config.and_then(|value| value.metadata_numeric_multiplier.as_deref()) {
+        for hit in &mut hits {
+            let multiplier = hit
+                .metadata
+                .get(field)
+                .and_then(Value::as_f64)
+                .filter(|value| value.is_finite() && *value > 0.0)
+                .unwrap_or(1.0) as f32;
+            hit.score *= multiplier;
+        }
     }
 
     hits.sort_by(|left, right| {
@@ -204,6 +201,9 @@ fn apply_score_adjustment(
             .partial_cmp(&left.score)
             .unwrap_or(Ordering::Equal)
     });
+    if let Some(min_score) = min_score.filter(|value| value.is_finite()) {
+        hits.retain(|hit| hit.score >= min_score);
+    }
     hits.truncate(top_k);
     hits
 }
@@ -713,7 +713,8 @@ fn build_fts_query(input: &str) -> Option<String> {
 mod tests {
     use super::{
         rerank_documents_with_embeddings, rerank_documents_with_heuristic, BestMatch, DocumentHit,
-        RerankerKind, RerankerOptions, Retriever, ScoreAdjustmentOptions, SearchOptions,
+        finalize_hits, RerankerKind, RerankerOptions, Retriever, ScoreAdjustmentOptions,
+        SearchOptions,
     };
     use crate::artifact::build_artifact;
     use crate::build::BuildArtifactOptions;
@@ -1138,5 +1139,109 @@ mod tests {
 
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].doc_id, "doc-high");
+    }
+
+    #[test]
+    fn min_score_can_return_fewer_than_top_k_hits() {
+        let hits = vec![
+            DocumentHit {
+                doc_id: "doc-strong".to_string(),
+                relative_path: "strong.md".to_string(),
+                canonical_url: None,
+                title: Some("Strong".to_string()),
+                summary: None,
+                score: 0.18,
+                best_match: BestMatch {
+                    chunk_id: 1,
+                    excerpt: "strong match".to_string(),
+                    heading_path: Vec::new(),
+                    char_start: 0,
+                    char_end: 12,
+                    score: 0.18,
+                },
+                metadata: BTreeMap::new(),
+            },
+            DocumentHit {
+                doc_id: "doc-weak".to_string(),
+                relative_path: "weak.md".to_string(),
+                canonical_url: None,
+                title: Some("Weak".to_string()),
+                summary: None,
+                score: 0.04,
+                best_match: BestMatch {
+                    chunk_id: 2,
+                    excerpt: "weak match".to_string(),
+                    heading_path: Vec::new(),
+                    char_start: 0,
+                    char_end: 10,
+                    score: 0.04,
+                },
+                metadata: BTreeMap::new(),
+            },
+        ];
+
+        let finalized = finalize_hits(hits, None, Some(0.05), 10);
+
+        assert_eq!(finalized.len(), 1);
+        assert_eq!(finalized[0].doc_id, "doc-strong");
+    }
+
+    #[test]
+    fn min_score_is_applied_after_score_adjustment() {
+        let mut promoted_metadata = BTreeMap::new();
+        promoted_metadata.insert("directory_weight".to_string(), Value::from(2.0));
+
+        let mut neutral_metadata = BTreeMap::new();
+        neutral_metadata.insert("directory_weight".to_string(), Value::from(1.0));
+
+        let hits = vec![
+            DocumentHit {
+                doc_id: "doc-promoted".to_string(),
+                relative_path: "promoted.md".to_string(),
+                canonical_url: None,
+                title: Some("Promoted".to_string()),
+                summary: None,
+                score: 0.08,
+                best_match: BestMatch {
+                    chunk_id: 1,
+                    excerpt: "promoted match".to_string(),
+                    heading_path: Vec::new(),
+                    char_start: 0,
+                    char_end: 14,
+                    score: 0.08,
+                },
+                metadata: promoted_metadata,
+            },
+            DocumentHit {
+                doc_id: "doc-cut".to_string(),
+                relative_path: "cut.md".to_string(),
+                canonical_url: None,
+                title: Some("Cut".to_string()),
+                summary: None,
+                score: 0.09,
+                best_match: BestMatch {
+                    chunk_id: 2,
+                    excerpt: "cut match".to_string(),
+                    heading_path: Vec::new(),
+                    char_start: 0,
+                    char_end: 9,
+                    score: 0.09,
+                },
+                metadata: neutral_metadata,
+            },
+        ];
+
+        let finalized = finalize_hits(
+            hits,
+            Some(&ScoreAdjustmentOptions {
+                metadata_numeric_multiplier: Some("directory_weight".to_string()),
+            }),
+            Some(0.1),
+            10,
+        );
+
+        assert_eq!(finalized.len(), 1);
+        assert_eq!(finalized[0].doc_id, "doc-promoted");
+        assert!(finalized[0].score >= 0.1);
     }
 }
