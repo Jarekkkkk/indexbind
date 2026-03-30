@@ -472,7 +472,7 @@ mod tests {
         DirectoryUpdateMode,
     };
     use anyhow::{anyhow, Result};
-    use indexbind_core::BuildArtifactOptions;
+    use indexbind_core::{BuildArtifactOptions, EmbeddingBackend};
     use serde_json::json;
     use std::fs;
     use std::path::Path;
@@ -628,7 +628,10 @@ Body
         run_git(tempdir.path(), &["commit", "-m", "init"]).unwrap();
 
         let cache = tempdir.path().join("build-cache.sqlite");
-        let options = BuildArtifactOptions::default();
+        let options = BuildArtifactOptions {
+            embedding_backend: EmbeddingBackend::Hashing { dimensions: 256 },
+            ..BuildArtifactOptions::default()
+        };
         let first = update_cache_from_directory_with_mode(
             tempdir.path(),
             &cache,

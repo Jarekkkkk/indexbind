@@ -11,6 +11,7 @@ export type JsonValue =
 export interface SearchOptions {
   topK?: number;
   hybrid?: boolean;
+  minScore?: number;
   reranker?: RerankerOptions;
   relativePathPrefix?: string;
   metadata?: Record<string, JsonValue>;

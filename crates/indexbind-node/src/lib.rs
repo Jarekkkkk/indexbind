@@ -21,6 +21,7 @@ use std::sync::Mutex;
 pub struct NodeSearchOptions {
     pub top_k: Option<u32>,
     pub hybrid: Option<bool>,
+    pub min_score: Option<f64>,
     pub reranker: Option<NodeRerankerOptions>,
     pub relative_path_prefix: Option<String>,
     pub metadata: Option<HashMap<String, String>>,
@@ -197,6 +198,10 @@ impl NativeIndex {
                 .as_ref()
                 .and_then(|value| value.hybrid)
                 .unwrap_or(true),
+            min_score: options
+                .as_ref()
+                .and_then(|value| value.min_score)
+                .map(|value| value as f32),
             reranker: options
                 .as_ref()
                 .and_then(|value| value.reranker.as_ref())

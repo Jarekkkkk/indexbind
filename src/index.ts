@@ -18,6 +18,7 @@ export type JsonValue =
 export interface SearchOptions {
   topK?: number;
   hybrid?: boolean;
+  minScore?: number;
   reranker?: RerankerOptions;
   relativePathPrefix?: string;
   metadata?: Record<string, string>;
@@ -84,6 +85,7 @@ export class Index {
     const nativeOptions: NativeSearchOptions = {
       topK: options.topK,
       hybrid: options.hybrid,
+      minScore: options.minScore,
       reranker: options.reranker,
       relativePathPrefix: options.relativePathPrefix,
       metadata: options.metadata,

@@ -92,6 +92,7 @@ struct Posting {
 struct SearchOptions {
     top_k: Option<usize>,
     hybrid: Option<bool>,
+    min_score: Option<f32>,
     reranker: Option<RerankerOptions>,
     relative_path_prefix: Option<String>,
     #[serde(default)]
@@ -244,37 +245,37 @@ impl WasmIndex {
             options.reranker.as_ref(),
             rerank_candidate_limit,
         )?;
-        let adjusted =
-            apply_score_adjustment(reranked, options.score_adjustment.as_ref(), top_k);
+        let adjusted = finalize_hits(
+            reranked,
+            options.score_adjustment.as_ref(),
+            options.min_score,
+            top_k,
+        );
         serde_wasm_bindgen::to_value(&adjusted).map_err(to_js_error)
     }
 }
 
-fn apply_score_adjustment(
+fn finalize_hits(
     mut hits: Vec<DocumentHit>,
     config: Option<&ScoreAdjustmentOptions>,
+    min_score: Option<f32>,
     top_k: usize,
 ) -> Vec<DocumentHit> {
-    let Some(config) = config else {
-        hits.truncate(top_k);
-        return hits;
-    };
-
-    let Some(field) = config.metadata_numeric_multiplier.as_deref() else {
-        hits.truncate(top_k);
-        return hits;
-    };
-
-    for hit in &mut hits {
-        let multiplier = hit
-            .metadata
-            .get(field)
-            .and_then(Value::as_f64)
-            .filter(|value| value.is_finite() && *value > 0.0)
-            .unwrap_or(1.0) as f32;
-        hit.score *= multiplier;
+    if let Some(field) = config.and_then(|value| value.metadata_numeric_multiplier.as_deref()) {
+        for hit in &mut hits {
+            let multiplier = hit
+                .metadata
+                .get(field)
+                .and_then(Value::as_f64)
+                .filter(|value| value.is_finite() && *value > 0.0)
+                .unwrap_or(1.0) as f32;
+            hit.score *= multiplier;
+        }
     }
 
+    if let Some(min_score) = min_score.filter(|value| value.is_finite()) {
+        hits.retain(|hit| hit.score >= min_score);
+    }
     hits.sort_by(|left, right| right.score.partial_cmp(&left.score).unwrap());
     hits.truncate(top_k);
     hits

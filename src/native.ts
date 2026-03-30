@@ -165,6 +165,7 @@ export interface NativeBenchmarkSummary {
 export interface NativeSearchOptions {
   topK?: number;
   hybrid?: boolean;
+  minScore?: number;
   reranker?: NativeRerankerOptions;
   relativePathPrefix?: string;
   metadata?: Record<string, string>;
