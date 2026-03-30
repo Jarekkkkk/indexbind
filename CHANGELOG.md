@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0
+
+- Added an npm-first `indexbind` CLI so `npm install indexbind` can drive `build`, `build-bundle`, `update-cache`, `export-*`, `inspect`, and `benchmark` flows through `npx indexbind ...`.
+- Added directory-oriented build, inspect, and benchmark helpers to `indexbind/build`, keeping the npm CLI and programmatic APIs aligned on the same native implementation.
+- Expanded docs with a host-controlled custom index builder example, refreshed the local `indexbind` skill to match the npm CLI and artifact model, and filtered CI so docs-only changes can skip the full Rust and browser validation path.
+
 ## 0.3.3
 
 - Fixed the release-time root package verification added in `0.3.2` to avoid requiring non-contract local `dist/` leftovers such as `dist/cloudflare/worker.mjs`, which caused clean CI release builds to fail.
