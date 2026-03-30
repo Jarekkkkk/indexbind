@@ -195,15 +195,15 @@ fn finalize_hits(
         }
     }
 
+    if let Some(min_score) = min_score.filter(|value| value.is_finite()) {
+        hits.retain(|hit| hit.score >= min_score);
+    }
     hits.sort_by(|left, right| {
         right
             .score
             .partial_cmp(&left.score)
             .unwrap_or(Ordering::Equal)
     });
-    if let Some(min_score) = min_score.filter(|value| value.is_finite()) {
-        hits.retain(|hit| hit.score >= min_score);
-    }
     hits.truncate(top_k);
     hits
 }

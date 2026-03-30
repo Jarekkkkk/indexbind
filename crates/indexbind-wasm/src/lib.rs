@@ -273,10 +273,10 @@ fn finalize_hits(
         }
     }
 
-    hits.sort_by(|left, right| right.score.partial_cmp(&left.score).unwrap());
     if let Some(min_score) = min_score.filter(|value| value.is_finite()) {
         hits.retain(|hit| hit.score >= min_score);
     }
+    hits.sort_by(|left, right| right.score.partial_cmp(&left.score).unwrap());
     hits.truncate(top_k);
     hits
 }
