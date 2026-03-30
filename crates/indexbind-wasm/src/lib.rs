@@ -91,7 +91,7 @@ struct Posting {
 #[serde(rename_all = "camelCase")]
 struct SearchOptions {
     top_k: Option<usize>,
-    hybrid: Option<bool>,
+    mode: Option<String>,
     min_score: Option<f32>,
     reranker: Option<RerankerOptions>,
     relative_path_prefix: Option<String>,
@@ -233,7 +233,7 @@ impl WasmIndex {
         let limit = (top_k * 8).max(rerank_candidate_limit).max(top_k);
         let query_embedding = self.embed_query(&query)?;
         let vector_docs = self.rank_documents_by_vector(&query_embedding, limit, &allowed_doc_ids);
-        let lexical_docs = if options.hybrid.unwrap_or(true) {
+        let lexical_docs = if retrieval_mode(&options)? == "hybrid" {
             self.rank_documents_by_lexical(&query, limit, &allowed_doc_ids)
         } else {
             Vec::new()
@@ -252,6 +252,14 @@ impl WasmIndex {
             top_k,
         );
         serde_wasm_bindgen::to_value(&adjusted).map_err(to_js_error)
+    }
+}
+
+fn retrieval_mode(options: &SearchOptions) -> Result<&str, JsValue> {
+    match options.mode.as_deref() {
+        Some("hybrid") | None => Ok("hybrid"),
+        Some("vector") => Ok("vector"),
+        Some(other) => Err(to_js_error(format!("unsupported retrieval mode: {other}"))),
     }
 }
 

@@ -10,7 +10,7 @@ export type JsonValue =
 
 export interface SearchOptions {
   topK?: number;
-  hybrid?: boolean;
+  mode?: 'hybrid' | 'vector';
   minScore?: number;
   reranker?: RerankerOptions;
   relativePathPrefix?: string;
@@ -199,6 +199,7 @@ export class WebIndex {
   }
 
   async search(query: string, options: SearchOptions = {}): Promise<DocumentHit[]> {
+    assertNoLegacyHybridOption(options);
     return this.#wasmIndex.search(query, options) as Promise<DocumentHit[]>;
   }
 }
@@ -247,6 +248,14 @@ export async function openWebIndex(
   options: OpenWebIndexOptions = {},
 ): Promise<WebIndex> {
   return openWebIndexInternal(base, createBrowserWasmIndex, options);
+}
+
+function assertNoLegacyHybridOption(options: SearchOptions): void {
+  if (options && typeof options === 'object' && Object.prototype.hasOwnProperty.call(options, 'hybrid')) {
+    throw new Error(
+      'Search option "hybrid" has been removed. Use mode: "hybrid" or mode: "vector" instead.',
+    );
+  }
 }
 
 export async function openWebIndexWithBindings(

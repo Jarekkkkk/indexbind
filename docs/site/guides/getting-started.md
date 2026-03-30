@@ -76,7 +76,7 @@ import { openIndex } from 'indexbind';
 const index = await openIndex('./index.sqlite');
 const hits = await index.search('rust guide', {
   topK: 5,
-  hybrid: true,
+  mode: 'hybrid',
   reranker: {
     kind: 'embedding-v1',
     candidatePoolSize: 25,

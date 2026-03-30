@@ -71,7 +71,7 @@ Use `search` to experiment with retrieval settings against a built SQLite artifa
 Supported flags:
 
 - `--top-k <n>`
-- `--hybrid true|false`
+- `--mode <hybrid|vector>`
 - `--reranker embedding-v1|heuristic-v1`
 - `--candidate-pool-size <n>`
 - `--relative-path-prefix <prefix>`
@@ -85,11 +85,14 @@ Example:
 ```bash
 npx indexbind search ./index.sqlite "rust guide" \
   --top-k 5 \
+  --mode vector \
   --reranker heuristic-v1 \
   --candidate-pool-size 25 \
   --min-score 0.05 \
   --text
 ```
+
+`--mode vector` means vector-only retrieval. There is no lexical-only CLI mode yet.
 
 ## Trigger Example
 

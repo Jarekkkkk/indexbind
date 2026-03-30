@@ -55,12 +55,34 @@ if (inspectInfo.documentCount !== 1) {
 
 const searchOutput = capture(
   npmCommand,
-  ['exec', '--', 'indexbind', 'search', cliArtifactPath, 'rust guide', '--top-k', '3'],
+  ['exec', '--', 'indexbind', 'search', cliArtifactPath, 'rust guide', '--mode', 'vector', '--top-k', '3'],
   tempDir,
 );
 const searchResult = JSON.parse(searchOutput);
-if (searchResult.hitCount !== 1 || searchResult.hits[0]?.relativePath !== 'rust.md') {
+if (
+  searchResult.options?.mode !== 'vector' ||
+  searchResult.hitCount !== 1 ||
+  searchResult.hits[0]?.relativePath !== 'rust.md'
+) {
   throw new Error(`Unexpected CLI search output: ${searchOutput}`);
+}
+
+const helpResult = spawnSync(
+  npmCommand,
+  ['exec', '--', 'indexbind', 'search', '--help'],
+  {
+    cwd: tempDir,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: {
+      ...process.env,
+      NPM_CONFIG_LOGLEVEL: 'silent',
+    },
+    encoding: 'utf8',
+  },
+);
+
+if (helpResult.status !== 0 || !`${helpResult.stdout}${helpResult.stderr}`.includes('indexbind search <artifact-file> <query>')) {
+  throw new Error(`Unexpected CLI help output: ${helpResult.stdout}${helpResult.stderr}`);
 }
 
 const verifyScript = path.join(tempDir, 'verify.mjs');
