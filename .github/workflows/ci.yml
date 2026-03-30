@@ -7,7 +7,70 @@ on:
   pull_request:
 
 jobs:
+  detect-changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      full_validate: ${{ steps.classify.outputs.full_validate }}
+      docs_validate: ${{ steps.classify.outputs.docs_validate }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Classify changes
+        id: classify
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base_sha="${{ github.event.pull_request.base.sha }}"
+            head_sha="${{ github.event.pull_request.head.sha }}"
+          else
+            base_sha="${{ github.event.before }}"
+            head_sha="${{ github.sha }}"
+          fi
+
+          if [[ -z "${base_sha}" || "${base_sha}" =~ ^0+$ ]]; then
+            echo "full_validate=true" >> "$GITHUB_OUTPUT"
+            echo "docs_validate=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          changed_files="$(git diff --name-only "${base_sha}" "${head_sha}")"
+
+          if [[ -z "${changed_files}" ]]; then
+            echo "full_validate=true" >> "$GITHUB_OUTPUT"
+            echo "docs_validate=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          docs_only=true
+          while IFS= read -r file; do
+            [[ -z "${file}" ]] && continue
+            case "${file}" in
+              docs/*|README.md|CHANGELOG.md|skills/*|AGENTS.md)
+                ;;
+              *)
+                docs_only=false
+                break
+                ;;
+            esac
+          done <<< "${changed_files}"
+
+          if [[ "${docs_only}" == "true" ]]; then
+            echo "full_validate=false" >> "$GITHUB_OUTPUT"
+            echo "docs_validate=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "full_validate=true" >> "$GITHUB_OUTPUT"
+            echo "docs_validate=false" >> "$GITHUB_OUTPUT"
+          fi
+
   validate:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.full_validate == 'true' }}
     runs-on: ubuntu-24.04
 
     steps:
@@ -61,3 +124,24 @@ jobs:
 
       - name: Release manifest verification
         run: npm run release:verify
+
+  docs-validate:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.docs_validate == 'true' }}
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build docs index
+        run: npm run docs:index
