@@ -26,7 +26,7 @@ Typical flow:
 3. load it in the browser or worker runtime
 
 ```bash
-cargo run -p indexbind-build -- build-bundle ./docs ./public/index.bundle
+npx indexbind build-bundle ./docs ./public/index.bundle
 ```
 
 ```ts
@@ -161,8 +161,8 @@ Typical flow:
 3. let the host tool open the new artifact locally
 
 ```bash
-cargo run -p indexbind-build -- update-cache ./workspace-docs ./.indexbind-cache.sqlite --git-diff
-cargo run -p indexbind-build -- export-artifact ./.indexbind-cache.sqlite ./workspace.sqlite
+npx indexbind update-cache ./workspace-docs ./.indexbind-cache.sqlite --git-diff
+npx indexbind export-artifact ./.indexbind-cache.sqlite ./workspace.sqlite
 ```
 
 ```ts

@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { unstable_startWorker } from 'wrangler';
 
 const repoRoot = process.cwd();
-const cargoCommand = 'cargo';
+const nodeCommand = process.execPath;
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'indexbind-cf-worker-'));
 const fixtureDocs = path.join(repoRoot, 'fixtures/benchmark/basic/docs');
 const expectedTopHit = 'guides/rust.md';
@@ -49,12 +49,9 @@ const requestModes = [
 
 for (const testCase of cases) {
   run(
-    cargoCommand,
+    nodeCommand,
     [
-      'run',
-      '-p',
-      'indexbind-build',
-      '--',
+      path.join(repoRoot, 'dist/cli.js'),
       'build-bundle',
       fixtureDocs,
       testCase.bundleDir,
@@ -143,6 +140,7 @@ try {
 
 function ensureBuiltArtifacts() {
   const requiredFiles = [
+    path.join(repoRoot, 'dist/cli.js'),
     path.join(repoRoot, 'dist/web.js'),
     path.join(repoRoot, 'dist/wasm/indexbind_wasm.js'),
     path.join(repoRoot, 'dist/wasm/indexbind_wasm_bg.wasm'),

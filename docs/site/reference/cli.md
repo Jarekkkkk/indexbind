@@ -104,5 +104,3 @@ npx indexbind export-artifact ./.indexbind-cache.sqlite ./index.sqlite
 ```
 
 This is only an adapter example. The cache logic still lives in the shared incremental engine, so the same flow can also be called from agent scripts, task runners, or a file watcher.
-
-The original Rust `indexbind-build` binary remains available for Rust-native environments and contributor workflows, but the public CLI surface is `indexbind`.

@@ -6,7 +6,7 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
-description = "CLI and build helpers for generating indexbind artifacts."
+description = "Build helpers for generating indexbind artifacts."
 
 [dependencies]
 anyhow.workspace = true
@@ -15,10 +15,6 @@ serde_json.workspace = true
 walkdir.workspace = true
 yaml-rust2.workspace = true
 indexbind-core = { path = "../indexbind-core" }
-
-[[bin]]
-name = "indexbind-build"
-path = "src/main.rs"
 
 [dev-dependencies]
 tempfile.workspace = true
