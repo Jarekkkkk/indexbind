@@ -45,9 +45,9 @@
 - Rust tests:
   - `cargo test --workspace`
 - Build an artifact:
-  - `npx indexbind build ./docs ./index.sqlite`
+  - `npm run build:cli && node dist/cli.js build ./docs ./index.sqlite`
 - Inspect an artifact:
-  - `npx indexbind inspect ./index.sqlite`
+  - `npm run build:cli && node dist/cli.js inspect ./index.sqlite`
 - Run bundled retrieval regression fixture:
   - `npm run benchmark:basic`
 
