@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1
+
+- Fixed the release workflow smoke artifact build step to use the current `indexbind build --backend ...` CLI shape.
+
 ## 0.6.0
 
 - Added default CLI build paths under `<input-dir>/.indexbind/`, defaulted build command input roots to the current directory, and switched build/cache selection to explicit `--backend` and `--cache-file` flags.
