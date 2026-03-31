@@ -148,6 +148,11 @@ interface FusedScore {
 
 interface SearchBackend {
   info(): unknown;
+  search(query: string, options?: unknown): DocumentHit[] | Promise<DocumentHit[]>;
+}
+
+interface WasmLikeSearchBackend {
+  info(): unknown;
   search(query: string, options?: unknown): unknown;
 }
 
@@ -161,7 +166,7 @@ export interface WasmIndexBinding {
     tokenizerBytes?: Uint8Array,
     modelBytes?: Uint8Array,
     configBytes?: Uint8Array,
-  ): SearchBackend;
+  ): WasmLikeSearchBackend;
 }
 
 export class WebIndex {
@@ -204,10 +209,10 @@ export class WebIndex {
 
   async search(query: string, options: SearchOptions = {}): Promise<DocumentHit[]> {
     assertNoLegacyHybridOption(options);
-    return this.#searchBackend.search(query, {
+    return await this.#searchBackend.search(query, {
       ...options,
       mode: options.mode ?? this.#modeProfile,
-    }) as Promise<DocumentHit[]>;
+    });
   }
 }
 
@@ -333,7 +338,7 @@ async function createBrowserWasmIndex(
       modelBuffers ? new Uint8Array(modelBuffers[0]) : undefined,
       modelBuffers ? new Uint8Array(modelBuffers[1]) : undefined,
       modelBuffers ? new Uint8Array(modelBuffers[2]) : undefined,
-    );
+    ) as SearchBackend;
   } catch (error) {
     const detail =
       error instanceof Error ? error.stack ?? `${error.name}: ${error.message}` : String(error);
@@ -365,7 +370,7 @@ function createBoundWasmIndex(
     modelBuffers ? new Uint8Array(modelBuffers[0]) : undefined,
     modelBuffers ? new Uint8Array(modelBuffers[1]) : undefined,
     modelBuffers ? new Uint8Array(modelBuffers[2]) : undefined,
-  );
+  ) as SearchBackend;
 }
 
 class LexicalSearchBackend implements SearchBackend {
@@ -387,7 +392,7 @@ class LexicalSearchBackend implements SearchBackend {
     return {};
   }
 
-  search(query: string, options: SearchOptions = {}): DocumentHit[] {
+  async search(query: string, options: SearchOptions = {}): Promise<DocumentHit[]> {
     const mode = options.mode ?? 'lexical';
     if (mode !== 'lexical') {
       throw new Error(
@@ -396,11 +401,12 @@ class LexicalSearchBackend implements SearchBackend {
     }
 
     const topK = options.topK ?? 10;
-    const allowedDocIds = new Set(
-      Array.from(this.#documentsById.values())
-        .filter((document) => documentMatches(document, options))
-        .map((document) => document.docId),
-    );
+    const allowedDocIds = new Set<string>();
+    for (const document of this.#documentsById.values()) {
+      if (documentMatches(document, options)) {
+        allowedDocIds.add(document.docId);
+      }
+    }
     if (allowedDocIds.size === 0) {
       return [];
     }

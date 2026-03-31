@@ -180,7 +180,7 @@ Browser and worker entrypoint for canonical bundles:
 import { openWebIndex } from 'indexbind/web';
 ```
 
-This path requires wasm initialization to succeed.
+This path uses wasm for the default hybrid/vector-capable runtime. If you open with `modeProfile: 'lexical'`, it can stay on the lighter lexical-only path without loading vectors or model files.
 
 `openWebIndex(base, options?)` returns a `WebIndex`.
 
@@ -190,10 +190,6 @@ Open options:
 - `modeProfile?`: `'hybrid'` or `'lexical'`
 
 `modeProfile: 'lexical'` skips vector/model loading for this `WebIndex` instance and makes lexical mode the default for `search()`.
-
-Optional open-time options:
-
-- `fetch?`: override resource loading for canonical bundle files when the host wants to virtualize bundle storage
 
 `WebIndex.info()` returns canonical bundle metadata such as:
 
