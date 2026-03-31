@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.2
+
+- Added index-scoped `indexbind.build.js` and `indexbind.search.js` conventions so one indexed root can attach document shaping, default search profiles, and lightweight query rewrites to the native `indexbind` pipeline.
+- Applied these conventions across CLI and Node directory/search flows without replacing the default directory scanner, incremental cache engine, or artifact contract.
+- Expanded docs, skills, and smoke/install coverage to describe and verify the new convention-based extension path.
+
 ## 0.6.1
 
 - Fixed the release workflow smoke artifact build step to use the current `indexbind build --backend ...` CLI shape.
