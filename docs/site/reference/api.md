@@ -30,9 +30,15 @@ const hits = await index.search('rust guide', {
 });
 ```
 
-### `openIndex(artifactPath)`
+### `openIndex(artifactPath, options?)`
 
 Opens a native SQLite artifact and returns an `Index`.
+
+Open options:
+
+- `modeProfile?`: `'hybrid'` or `'lexical'`
+
+Use `modeProfile: 'lexical'` when this `Index` instance should stay lexical-only. In that profile, `index.search()` defaults to lexical mode and rejects `mode: 'hybrid'` / `mode: 'vector'`.
 
 ### `index.info()`
 
@@ -177,6 +183,13 @@ import { openWebIndex } from 'indexbind/web';
 This path requires wasm initialization to succeed.
 
 `openWebIndex(base, options?)` returns a `WebIndex`.
+
+Open options:
+
+- `fetch?`: custom resource loader
+- `modeProfile?`: `'hybrid'` or `'lexical'`
+
+`modeProfile: 'lexical'` skips vector/model loading for this `WebIndex` instance and makes lexical mode the default for `search()`.
 
 Optional open-time options:
 
