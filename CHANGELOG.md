@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0
+
+- Added default CLI build paths under `<input-dir>/.indexbind/`, defaulted build command input roots to the current directory, and switched build/cache selection to explicit `--backend` and `--cache-file` flags.
+- Made directory-based ingestion honor hidden paths, `.gitignore`, and common generated/dependency directories such as `node_modules/`, `target/`, `dist/`, and `build/`.
+- Removed the legacy root CLI build form so all supported CLI flows now use explicit subcommands.
+
 ## 0.5.1
 
 - Fixed the release workflow after the Rust CLI removal by switching the release smoke artifact build step to the npm-first `indexbind` CLI.
