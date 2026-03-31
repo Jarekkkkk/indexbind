@@ -7,6 +7,11 @@ import {
   type NativeOpenIndexOptions,
   type NativeSearchOptions,
 } from './native.js';
+import {
+  applySearchConvention,
+  loadSearchConvention,
+  sourceRootPathFromArtifactInfo,
+} from './repo-conventions.js';
 
 export type JsonValue =
   | null
@@ -67,15 +72,28 @@ export interface ArtifactInfo {
 
 export interface OpenIndexOptions {
   modeProfile?: 'hybrid' | 'lexical';
+  applySearchConvention?: boolean;
 }
 
 export class Index {
   readonly #nativeIndex: NativeIndex;
   readonly #modeProfile: 'hybrid' | 'lexical';
+  readonly #artifactPath: string;
+  readonly #artifactInfo: ArtifactInfo;
+  readonly #searchConventionPromise: Promise<Awaited<ReturnType<typeof loadSearchConvention>>>;
 
-  private constructor(nativeIndex: NativeIndex, modeProfile: 'hybrid' | 'lexical') {
+  private constructor(
+    nativeIndex: NativeIndex,
+    artifactPath: string,
+    artifactInfo: ArtifactInfo,
+    modeProfile: 'hybrid' | 'lexical',
+    searchConventionPromise: Promise<Awaited<ReturnType<typeof loadSearchConvention>>>,
+  ) {
     this.#nativeIndex = nativeIndex;
+    this.#artifactPath = artifactPath;
+    this.#artifactInfo = artifactInfo;
     this.#modeProfile = modeProfile;
+    this.#searchConventionPromise = searchConventionPromise;
   }
 
   static async open(artifactPath: string, options: OpenIndexOptions = {}): Promise<Index> {
@@ -85,25 +103,38 @@ export class Index {
       modeProfile,
     };
     const nativeIndex = module.NativeIndex.open(artifactPath, nativeOptions);
-    return new Index(nativeIndex, modeProfile);
+    const artifactInfo = mapArtifactInfo(nativeIndex.info());
+    const sourceRootPath = sourceRootPathFromArtifactInfo(artifactInfo);
+    const searchConventionPromise = options.applySearchConvention === false
+      ? Promise.resolve(null)
+      : sourceRootPath
+      ? loadSearchConvention(sourceRootPath)
+      : Promise.resolve(null);
+    return new Index(nativeIndex, artifactPath, artifactInfo, modeProfile, searchConventionPromise);
   }
 
   info(): ArtifactInfo {
-    return mapArtifactInfo(this.#nativeIndex.info());
+    return this.#artifactInfo;
   }
 
   async search(query: string, options: SearchOptions = {}): Promise<DocumentHit[]> {
     assertNoLegacyHybridOption(options);
+    const searchConvention = await this.#searchConventionPromise;
+    const resolved = await applySearchConvention(query, options, searchConvention, {
+      artifactPath: this.#artifactPath,
+      sourceRootPath: sourceRootPathFromArtifactInfo(this.#artifactInfo) ?? '.',
+      artifactInfo: this.#artifactInfo,
+    });
     const nativeOptions: NativeSearchOptions = {
-      topK: options.topK,
-      mode: options.mode ?? this.#modeProfile,
-      minScore: options.minScore,
-      reranker: options.reranker,
-      relativePathPrefix: options.relativePathPrefix,
-      metadata: options.metadata,
-      scoreAdjustment: options.scoreAdjustment,
+      topK: resolved.options.topK,
+      mode: resolved.options.mode ?? this.#modeProfile,
+      minScore: resolved.options.minScore,
+      reranker: resolved.options.reranker,
+      relativePathPrefix: resolved.options.relativePathPrefix,
+      metadata: resolved.options.metadata,
+      scoreAdjustment: resolved.options.scoreAdjustment,
     };
-    return this.#nativeIndex.search(query, nativeOptions).map(mapHit);
+    return this.#nativeIndex.search(resolved.query, nativeOptions).map(mapHit);
   }
 }
 

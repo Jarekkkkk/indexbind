@@ -141,6 +141,12 @@ export interface NativeIncrementalBuildStats {
   activeChunkCount: number;
 }
 
+export interface NativeBuildCacheUpdate {
+  documents: NativeBuildDocument[];
+  removedRelativePaths: string[];
+  replaceAll: boolean;
+}
+
 export interface NativeDirectoryUpdateMode {
   mode?: 'full-scan' | 'git-diff';
   baseRevision?: string;
@@ -199,6 +205,12 @@ export interface NativeModule {
     outputPath: string,
     options?: NativeBuildOptions,
   ): NativeBuildStats;
+  buildArtifact(
+    outputPath: string,
+    documents: NativeBuildDocument[],
+    options?: NativeBuildOptions,
+  ): NativeBuildStats;
+  collectDocumentsFromDirectory(inputDir: string): NativeBuildDocument[];
   buildCanonicalBundle(
     outputDir: string,
     documents: NativeBuildDocument[],
@@ -215,6 +227,10 @@ export interface NativeModule {
     removedRelativePaths?: string[],
     options?: NativeBuildOptions,
   ): NativeIncrementalBuildStats;
+  collectBuildCacheUpdateFromDirectory(
+    inputDir: string,
+    updateMode?: NativeDirectoryUpdateMode,
+  ): NativeBuildCacheUpdate;
   updateBuildCacheFromDirectory(
     inputDir: string,
     cachePath: string,

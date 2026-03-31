@@ -1,12 +1,16 @@
 use indexbind_build::{
-    build_canonical_from_directory, build_from_directory, update_cache_from_directory_with_mode,
-    DirectoryUpdateMode,
+    build_canonical_from_directory, build_from_directory,
+    collect_directory_update_from_mode as collect_directory_update_from_mode_native,
+    collect_documents_from_directory as collect_documents_from_directory_native,
+    update_cache_from_directory_with_mode, DirectoryUpdateMode,
 };
 use indexbind_core::{
-    build_canonical_artifact, export_artifact_from_build_cache, export_canonical_from_build_cache,
-    update_build_cache, BuildArtifactOptions, BuildCacheUpdate, BuildStats, CanonicalBuildStats,
-    ChunkingOptions, DocumentHit, EmbeddingBackend, IncrementalBuildStats, ModeProfile,
-    NormalizedDocument, Retriever, RetrieverOpenOptions, SearchOptions, SourceRoot,
+    build_artifact as build_artifact_native, build_canonical_artifact,
+    export_artifact_from_build_cache,
+    export_canonical_from_build_cache, update_build_cache, BuildArtifactOptions, BuildCacheUpdate,
+    BuildStats, CanonicalBuildStats, ChunkingOptions, DocumentHit, EmbeddingBackend,
+    IncrementalBuildStats, ModeProfile, NormalizedDocument, Retriever, RetrieverOpenOptions,
+    SearchOptions, SourceRoot,
 };
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
@@ -123,6 +127,13 @@ pub struct NodeIncrementalBuildStats {
     pub removed_document_count: i64,
     pub active_document_count: i64,
     pub active_chunk_count: i64,
+}
+
+#[napi(object)]
+pub struct NodeBuildCacheUpdate {
+    pub documents: Vec<NodeBuildDocument>,
+    pub removed_relative_paths: Vec<String>,
+    pub replace_all: bool,
 }
 
 #[napi(object)]
@@ -297,6 +308,23 @@ pub fn build_canonical_bundle(
 }
 
 #[napi]
+pub fn build_artifact(
+    output_path: String,
+    documents: Vec<NodeBuildDocument>,
+    options: Option<NodeBuildOptions>,
+) -> napi::Result<NodeBuildStats> {
+    let build_options = map_build_options(options);
+    let normalized_documents = documents
+        .into_iter()
+        .map(map_build_document)
+        .collect::<napi::Result<Vec<_>>>()?;
+    let stats =
+        build_artifact_native(&PathBuf::from(output_path), &normalized_documents, &build_options)
+            .map_err(map_error)?;
+    Ok(map_plain_build_stats(stats))
+}
+
+#[napi]
 pub fn build_artifact_from_directory(
     input_dir: String,
     output_path: String,
@@ -309,6 +337,13 @@ pub fn build_artifact_from_directory(
     )
     .map_err(map_error)?;
     Ok(map_plain_build_stats(stats))
+}
+
+#[napi]
+pub fn collect_documents_from_directory(input_dir: String) -> napi::Result<Vec<NodeBuildDocument>> {
+    let (_, documents) =
+        collect_documents_from_directory_native(&PathBuf::from(input_dir)).map_err(map_error)?;
+    Ok(documents.into_iter().map(map_node_build_document).collect())
 }
 
 #[napi]
@@ -349,6 +384,35 @@ pub fn update_build_cache_from_documents(
     )
     .map_err(map_error)?;
     Ok(map_incremental_build_stats(stats))
+}
+
+#[napi]
+pub fn collect_build_cache_update_from_directory(
+    input_dir: String,
+    update_mode: Option<NodeDirectoryUpdateMode>,
+) -> napi::Result<NodeBuildCacheUpdate> {
+    let mode = match update_mode.as_ref().and_then(|value| value.mode.as_deref()) {
+        Some(mode) if mode == "git-diff" => DirectoryUpdateMode::GitDiff {
+            base_revision: update_mode.and_then(|value| value.base_revision),
+        },
+        Some(mode) if mode != "full-scan" => {
+            return Err(Error::from_reason(format!(
+                "unsupported directory update mode: {mode}"
+            )))
+        }
+        _ => DirectoryUpdateMode::FullScan,
+    };
+    let (_, update) = collect_directory_update_from_mode_native(&PathBuf::from(input_dir), mode)
+        .map_err(map_error)?;
+    Ok(NodeBuildCacheUpdate {
+        documents: update
+            .documents
+            .into_iter()
+            .map(map_node_build_document)
+            .collect(),
+        removed_relative_paths: update.removed_relative_paths,
+        replace_all: update.replace_all,
+    })
 }
 
 #[napi]
@@ -506,6 +570,21 @@ fn map_build_document(document: NodeBuildDocument) -> napi::Result<NormalizedDoc
         content: document.content,
         metadata,
     })
+}
+
+fn map_node_build_document(document: NormalizedDocument) -> NodeBuildDocument {
+    NodeBuildDocument {
+        doc_id: document.doc_id,
+        source_path: document.source_path,
+        relative_path: document.relative_path,
+        canonical_url: document.canonical_url,
+        title: document.title,
+        summary: document.summary,
+        content: document.content,
+        metadata_json: Some(
+            serde_json::to_string(&document.metadata).unwrap_or_else(|_| "{}".to_string()),
+        ),
+    }
 }
 
 fn map_build_options(options: Option<NodeBuildOptions>) -> BuildArtifactOptions {
