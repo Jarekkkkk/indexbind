@@ -12,6 +12,11 @@ import {
   inspectArtifact,
   updateBuildCacheFromDirectory,
 } from './build.js';
+import {
+  applySearchConvention,
+  loadSearchConvention,
+  sourceRootPathFromArtifactInfo,
+} from './repo-conventions.js';
 
 type OutputMode = 'json' | 'text';
 
@@ -278,13 +283,22 @@ async function searchCommand(args: string[]): Promise<void> {
   }
   const { outputMode, args: filteredArgs } = extractOutputMode(args);
   const { artifactPath, query, options } = parseSearchCommandArgs(filteredArgs);
-  const index = await openIndex(artifactPath, {
-    modeProfile: options.mode === 'lexical' ? 'lexical' : 'hybrid',
+  const artifactInfo = await inspectArtifact(artifactPath);
+  const sourceRootPath = sourceRootPathFromArtifactInfo(artifactInfo);
+  const searchConvention = sourceRootPath ? await loadSearchConvention(sourceRootPath) : null;
+  const resolved = await applySearchConvention(query, options, searchConvention, {
+    artifactPath,
+    sourceRootPath: sourceRootPath ?? '.',
+    artifactInfo,
   });
-  const hits = await index.search(query, options);
+  const index = await openIndex(artifactPath, {
+    modeProfile: resolved.options.mode === 'lexical' ? 'lexical' : 'hybrid',
+    applySearchConvention: false,
+  });
+  const hits = await index.search(resolved.query, resolved.options);
   const envelope: SearchEnvelope = {
-    query,
-    options: normalizeSearchOptions(options),
+    query: resolved.query,
+    options: normalizeSearchOptions(resolved.options),
     hitCount: hits.length,
     hits,
   };

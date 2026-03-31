@@ -161,6 +161,64 @@ Use this path when:
 - you are iterating on local content repeatedly
 - a host application or script wants to trigger rebuilds incrementally
 
+## Optional Index-Scoped Conventions
+
+If one indexed directory needs a small amount of host-specific shaping, place convention files next to its `.indexbind/` output:
+
+```text
+docs/
+  indexbind.build.js
+  indexbind.search.js
+  .indexbind/
+```
+
+`indexbind.build.js` can extend the default directory scanner without replacing it:
+
+```js
+export function includeDocument(relativePath) {
+  return relativePath !== 'draft.md';
+}
+
+export function transformDocument(document) {
+  return {
+    ...document,
+    canonicalUrl: `https://example.com/${document.relativePath.replace(/\.md$/i, '')}`,
+    metadata: {
+      ...(document.metadata ?? {}),
+      is_default_searchable: 'true',
+      directory_weight: 1.0,
+    },
+  };
+}
+```
+
+`indexbind.search.js` can define a default search profile and a lightweight query rewrite:
+
+```js
+export const profiles = {
+  default: {
+    metadata: {
+      is_default_searchable: 'true',
+    },
+    scoreAdjustment: {
+      metadataNumericMultiplier: 'directory_weight',
+    },
+  },
+};
+
+export function transformQuery(query) {
+  return {
+    query: query.replace(/btc/ig, 'bitcoin'),
+  };
+}
+```
+
+These files are index-scoped:
+
+- if you index `./docs`, put them in `./docs/`
+- they affect only that indexed root
+- there is no repo-root fallback
+
 ## Query the Bundle in Web Runtimes
 
 ```ts

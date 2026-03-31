@@ -38,6 +38,18 @@ pub fn build_from_directory(
     build_artifact(output, &documents, &options).map_err(Into::into)
 }
 
+pub fn collect_documents_from_directory(input: &Path) -> Result<(SourceRoot, Vec<NormalizedDocument>)> {
+    let source_root = input.canonicalize()?;
+    let documents = read_documents(&source_root)?;
+    Ok((
+        SourceRoot {
+            id: "root".to_string(),
+            original_path: source_root.display().to_string(),
+        },
+        documents,
+    ))
+}
+
 pub fn update_cache_from_directory(
     input: &Path,
     cache_path: &Path,
@@ -73,6 +85,21 @@ pub fn update_cache_from_directory_with_mode(
             .map_err(Into::into)
         }
     }
+}
+
+pub fn collect_directory_update_from_mode(
+    input: &Path,
+    mode: DirectoryUpdateMode,
+) -> Result<(SourceRoot, BuildCacheUpdate)> {
+    let source_root = input.canonicalize()?;
+    let update = read_directory_update(&source_root, mode)?;
+    Ok((
+        SourceRoot {
+            id: "root".to_string(),
+            original_path: source_root.display().to_string(),
+        },
+        update,
+    ))
 }
 
 pub fn export_artifact_from_cache(cache_path: &Path, output: &Path) -> Result<BuildStats> {

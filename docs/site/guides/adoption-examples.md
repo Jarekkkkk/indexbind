@@ -88,6 +88,74 @@ This shape works well when the host already owns:
 
 This is also a good fit when the blog or publishing system wants search to be one build output rather than a separate search service.
 
+## Index-Scoped Conventions for a Mostly-Default Repo
+
+Use this shape when the default directory scanner is already close, but one indexed root still needs a small amount of repo-specific behavior.
+
+Typical flow:
+
+1. keep using `indexbind build`, `build-bundle`, or `update-cache`
+2. place `indexbind.build.js` beside the indexed root
+3. place `indexbind.search.js` beside the indexed root when CLI or Node search needs a default profile
+
+```text
+docs/
+  indexbind.build.js
+  indexbind.search.js
+  .indexbind/
+```
+
+Example `indexbind.build.js`:
+
+```js
+export function includeDocument(relativePath) {
+  return relativePath !== 'archive/notes.md';
+}
+
+export function transformDocument(document) {
+  return {
+    ...document,
+    canonicalUrl: `https://example.com/${document.relativePath.replace(/\.md$/i, '')}`,
+    metadata: {
+      ...(document.metadata ?? {}),
+      is_default_searchable: 'true',
+      directory_weight: 1.0,
+    },
+  };
+}
+```
+
+Example `indexbind.search.js`:
+
+```js
+export const profiles = {
+  default: {
+    metadata: {
+      is_default_searchable: 'true',
+    },
+    scoreAdjustment: {
+      metadataNumericMultiplier: 'directory_weight',
+    },
+  },
+};
+
+export function transformQuery(query) {
+  return {
+    query: query.replace(/btc/ig, 'bitcoin'),
+  };
+}
+```
+
+This shape works well when the host only needs to:
+
+- skip a few files from the default scan
+- derive `canonicalUrl`
+- inject host metadata such as `source_root`, `content_kind`, `is_default_searchable`, or `directory_weight`
+- define a default CLI/Node search profile
+- add lightweight query alias expansion
+
+This is the right middle ground when a repo does not need a full custom builder script, but still wants more than the zero-config defaults.
+
 ## Custom Index Builder for a Mixed Local Knowledge Base
 
 Use this shape when the host application wants to decide exactly which directories to scan, how to classify documents, and which metadata or weighting rules should be written into the index.
@@ -183,6 +251,7 @@ This shape fits:
 
 - Prefer the docs-site pattern when the runtime target is browser or worker first.
 - Prefer the publishing pattern when the host already has a structured content pipeline.
+- Prefer the index-scoped convention pattern when the default scanner is close and only a small amount of host policy needs to be attached to one indexed root.
 - Prefer the custom-builder pattern when the host needs to classify mixed local content before indexing.
 - Prefer the local knowledge-base pattern when incremental rebuilds and local Node queries matter more than browser distribution.
 

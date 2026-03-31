@@ -60,6 +60,12 @@ Scan defaults:
 - nested `.gitignore` rules are respected
 - common generated or dependency directories such as `node_modules/`, `target/`, `dist/`, and `build/` are ignored
 
+Index-scoped convention files:
+
+- `indexbind.build.js` and `indexbind.search.js` are auto-discovered from the exact `input-dir` or artifact `sourceRoot`
+- if you index `./docs`, place them in `./docs/`, next to `./docs/.indexbind/`
+- they affect only that indexed root; there is no repo-root or current-working-directory fallback
+
 Embedding backend selection:
 
 - pass `--backend hashing`
@@ -76,6 +82,45 @@ Recommended sequence:
 3. `export-bundle` to write a fresh canonical bundle when needed
 
 `update-cache` defaults to a full directory scan. Add `--git-diff` to use Git as a change-detection fast path. Add `--git-base <rev>` when you want to diff against a specific revision and still reuse the same cache.
+
+## Build Conventions
+
+Optional `indexbind.build.js` exports can extend the default directory scanner:
+
+```js
+export function includeDocument(relativePath, ctx) {
+  return true;
+}
+
+export async function transformDocument(document, ctx) {
+  return document;
+}
+```
+
+`transformDocument()` receives the default normalized document shape after frontmatter parsing. It is the right place to derive `canonicalUrl`, inject metadata, or normalize title/summary without replacing the scanner.
+
+## Search Conventions
+
+Optional `indexbind.search.js` exports can define a default profile for `indexbind search`:
+
+```js
+export const profiles = {
+  default: {
+    metadata: {
+      is_default_searchable: 'true',
+    },
+    scoreAdjustment: {
+      metadataNumericMultiplier: 'directory_weight',
+    },
+  },
+};
+
+export function transformQuery(query, ctx) {
+  return { query };
+}
+```
+
+`profiles.default` is applied first, then explicit CLI flags override it. `transformQuery()` rewrites only the query string.
 
 ## Search Flags
 

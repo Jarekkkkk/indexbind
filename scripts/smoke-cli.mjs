@@ -39,6 +39,50 @@ fs.mkdirSync(path.join(docsDir, 'nested'), { recursive: true });
 fs.writeFileSync(path.join(docsDir, 'ignored.md'), '# Ignored\n\nIgnored by gitignore.\n');
 fs.writeFileSync(path.join(docsDir, 'nested', 'skip.md'), '# Skip\n\nIgnored by gitignore.\n');
 fs.writeFileSync(path.join(docsDir, 'nested', 'keep.md'), '# Keep\n\nAllowed by negation.\n');
+fs.writeFileSync(
+  path.join(docsDir, 'private.md'),
+  '# Private Note\n\nBitcoin planning note that should stay out of default search.\n',
+);
+fs.writeFileSync(
+  path.join(docsDir, 'skip.md'),
+  '# Skip Me\n\nThis file should be excluded by the build convention.\n',
+);
+fs.writeFileSync(
+  path.join(docsDir, 'indexbind.build.js'),
+  `module.exports = {
+  includeDocument(relativePath) {
+    return relativePath !== 'skip.md';
+  },
+  transformDocument(document) {
+    const isDefault = document.relativePath === 'rust.md';
+    return {
+      ...document,
+      canonicalUrl: 'https://example.com/' + document.relativePath.replace(/\\.md$/i, ''),
+      metadata: {
+        ...(document.metadata || {}),
+        is_default_searchable: String(isDefault),
+        directory_weight: isDefault ? 2 : 0.1,
+      },
+    };
+  },
+};
+`,
+);
+fs.writeFileSync(
+  path.join(docsDir, 'indexbind.search.js'),
+  `module.exports = {
+  profiles: {
+    default: {
+      metadata: { is_default_searchable: 'true' },
+      scoreAdjustment: { metadataNumericMultiplier: 'directory_weight' },
+    },
+  },
+  transformQuery(query) {
+    return { query: query.replace(/btc/ig, 'bitcoin') };
+  },
+};
+`,
+);
 
 runCli(['build', docsDir, '--backend', 'hashing']);
 if (!fs.existsSync(defaultArtifactPath)) {
@@ -60,6 +104,25 @@ if (lexicalSearchResult.options?.mode !== 'lexical') {
 }
 if (lexicalSearchResult.hits.some((hit) => hit.relativePath !== 'rust.md')) {
   throw new Error(`Expected ignored files to stay out of the index, got ${JSON.stringify(lexicalSearchResult)}`);
+}
+if (lexicalSearchResult.hits[0]?.canonicalUrl !== 'https://example.com/rust') {
+  throw new Error(`Expected build convention canonicalUrl, got ${JSON.stringify(lexicalSearchResult)}`);
+}
+
+const conventionSearchResult = JSON.parse(captureCli(['search', explicitArtifactPath, 'btc']));
+if (
+  conventionSearchResult.query !== 'bitcoin' ||
+  conventionSearchResult.hitCount !== 1 ||
+  conventionSearchResult.hits[0]?.relativePath !== 'rust.md'
+) {
+  throw new Error(`Expected search convention defaults and query rewrite, got ${JSON.stringify(conventionSearchResult)}`);
+}
+
+const overrideSearchResult = JSON.parse(
+  captureCli(['search', explicitArtifactPath, 'btc', '--metadata', 'is_default_searchable=false']),
+);
+if (overrideSearchResult.hits[0]?.relativePath !== 'private.md') {
+  throw new Error(`Expected explicit metadata flag to override default search profile, got ${JSON.stringify(overrideSearchResult)}`);
 }
 
 runCli(['update-cache', docsDir, '--backend', 'hashing']);
@@ -88,6 +151,10 @@ if (lexicalSearchResult.query !== 'rust guide') {
 
 const { openIndex } = await import(pathToFileURL(path.join(repoRoot, 'dist/index.js')).href);
 const index = await openIndex(explicitArtifactPath);
+const conventionHits = await index.search('btc');
+if (!conventionHits[0] || conventionHits[0].relativePath !== 'rust.md') {
+  throw new Error(`Expected Node API search convention hit, got ${JSON.stringify(conventionHits)}`);
+}
 const lexicalHits = await index.search('rust guide', { mode: 'lexical' });
 if (!lexicalHits[0] || lexicalHits[0].relativePath !== 'rust.md') {
   throw new Error(`Expected lexical mode API search hit, got ${JSON.stringify(lexicalHits)}`);

@@ -29,9 +29,53 @@ const docsDir = path.join(tempDir, 'docs');
 fs.mkdirSync(docsDir, { recursive: true });
 fs.writeFileSync(
   path.join(docsDir, 'rust.md'),
-  '# Rust Guide\n\nRust retrieval guide for local search.\n',
+  '# Rust Guide\n\nRust retrieval guide for local bitcoin search.\n',
 );
 fs.writeFileSync(path.join(docsDir, '.hidden.md'), '# Hidden\n\nShould not be indexed.\n');
+fs.writeFileSync(
+  path.join(docsDir, 'private.md'),
+  '# Private Note\n\nBitcoin planning note that should stay out of default search.\n',
+);
+fs.writeFileSync(
+  path.join(docsDir, 'skip.md'),
+  '# Skip Me\n\nThis file should be excluded by the build convention.\n',
+);
+fs.writeFileSync(
+  path.join(docsDir, 'indexbind.build.js'),
+  `module.exports = {
+  includeDocument(relativePath) {
+    return relativePath !== 'skip.md';
+  },
+  transformDocument(document) {
+    const isDefault = document.relativePath === 'rust.md';
+    return {
+      ...document,
+      canonicalUrl: 'https://example.com/' + document.relativePath.replace(/\\.md$/i, ''),
+      metadata: {
+        ...(document.metadata || {}),
+        is_default_searchable: String(isDefault),
+        directory_weight: isDefault ? 2 : 0.1,
+      },
+    };
+  },
+};
+`,
+);
+fs.writeFileSync(
+  path.join(docsDir, 'indexbind.search.js'),
+  `module.exports = {
+  profiles: {
+    default: {
+      metadata: { is_default_searchable: 'true' },
+      scoreAdjustment: { metadataNumericMultiplier: 'directory_weight' },
+    },
+  },
+  transformQuery(query) {
+    return { query: query.replace(/btc/ig, 'bitcoin') };
+  },
+};
+`,
+);
 
 const cliArtifactPath = path.join(docsDir, '.indexbind', 'index.sqlite');
 const buildOutput = capture(
@@ -40,7 +84,7 @@ const buildOutput = capture(
   tempDir,
 );
 const buildStats = JSON.parse(buildOutput);
-if (buildStats.documentCount !== 1 || buildStats.chunkCount < 1) {
+if (buildStats.documentCount !== 2 || buildStats.chunkCount < 2) {
   throw new Error(`Unexpected build stats: ${buildOutput}`);
 }
 
@@ -50,7 +94,7 @@ const inspectOutput = capture(
   tempDir,
 );
 const inspectInfo = JSON.parse(inspectOutput);
-if (inspectInfo.documentCount !== 1) {
+if (inspectInfo.documentCount !== 2) {
   throw new Error(`Unexpected inspect output: ${inspectOutput}`);
 }
 
@@ -82,6 +126,30 @@ if (
   throw new Error(`Unexpected lexical CLI search output: ${lexicalSearchOutput}`);
 }
 
+const conventionSearchOutput = capture(
+  npmCommand,
+  ['exec', '--', 'indexbind', 'search', cliArtifactPath, 'btc'],
+  tempDir,
+);
+const conventionSearchResult = JSON.parse(conventionSearchOutput);
+if (
+  conventionSearchResult.query !== 'bitcoin' ||
+  conventionSearchResult.hitCount !== 1 ||
+  conventionSearchResult.hits[0]?.relativePath !== 'rust.md'
+) {
+  throw new Error(`Unexpected convention CLI search output: ${conventionSearchOutput}`);
+}
+
+const overrideSearchOutput = capture(
+  npmCommand,
+  ['exec', '--', 'indexbind', 'search', cliArtifactPath, 'btc', '--metadata', 'is_default_searchable=false'],
+  tempDir,
+);
+const overrideSearchResult = JSON.parse(overrideSearchOutput);
+if (overrideSearchResult.hits[0]?.relativePath !== 'private.md') {
+  throw new Error(`Unexpected explicit override CLI search output: ${overrideSearchOutput}`);
+}
+
 const helpResult = spawnSync(
   npmCommand,
   ['exec', '--', 'indexbind', 'search', '--help'],
@@ -107,7 +175,7 @@ const updateCacheOutput = capture(
   tempDir,
 );
 const updateCacheStats = JSON.parse(updateCacheOutput);
-if (updateCacheStats.activeDocumentCount !== 1) {
+if (updateCacheStats.activeDocumentCount !== 2) {
   throw new Error(`Unexpected update-cache output: ${updateCacheOutput}`);
 }
 
@@ -118,7 +186,7 @@ const exportOutput = capture(
   tempDir,
 );
 const exportStats = JSON.parse(exportOutput);
-if (exportStats.documentCount !== 1 || !fs.existsSync(exportedArtifactPath)) {
+if (exportStats.documentCount !== 2 || !fs.existsSync(exportedArtifactPath)) {
   throw new Error(`Unexpected export-artifact output: ${exportOutput}`);
 }
 

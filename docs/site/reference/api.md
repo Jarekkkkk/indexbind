@@ -14,6 +14,13 @@ summary: Node, build, web, and Cloudflare entrypoints, plus the current search o
 - `indexbind/web`
 - `indexbind/cloudflare`
 
+Node-side directory and artifact APIs also support optional index-scoped convention files:
+
+- `indexbind.build.js`
+- `indexbind.search.js`
+
+These files live beside the indexed root’s `.indexbind/` directory and are auto-discovered only from that exact root.
+
 ## `indexbind`
 
 Native Node entrypoint for SQLite artifacts:
@@ -39,6 +46,11 @@ Open options:
 - `modeProfile?`: `'hybrid'` or `'lexical'`
 
 Use `modeProfile: 'lexical'` when this `Index` instance should stay lexical-only. In that profile, `index.search()` defaults to lexical mode and rejects `mode: 'hybrid'` / `mode: 'vector'`.
+
+When the artifact `sourceRoot` contains an `indexbind.search.js`, `openIndex()` applies:
+
+- `profiles.default` as the default search profile
+- `transformQuery()` as a lightweight query rewrite hook
 
 ### `index.info()`
 
@@ -134,6 +146,13 @@ Available helpers:
 - `exportCanonicalBundleFromBuildCache(cachePath, outputDir)`
 - `inspectArtifact(artifactPath)`
 - `benchmarkArtifact(artifactPath, queriesJsonPath)`
+
+For directory-based helpers, if the input root contains `indexbind.build.js`, these APIs automatically apply:
+
+- `includeDocument(relativePath, ctx)`
+- `transformDocument(document, ctx)`
+
+This keeps host-specific document shaping attached to the shared directory scanner and incremental cache flow.
 
 `updateBuildCache(...)` returns:
 

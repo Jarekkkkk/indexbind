@@ -1,14 +1,17 @@
+import path from 'node:path';
 import {
   loadNativeModule,
   type NativeArtifactInfo,
   type NativeBuildStats,
   type NativeBenchmarkSummary,
+  type NativeBuildCacheUpdate,
   type NativeBuildDocument,
   type NativeIncrementalBuildStats,
   type NativeBuildOptions,
   type NativeCanonicalBuildStats,
   type NativeDirectoryUpdateMode,
 } from './native.js';
+import { applyBuildConvention, loadBuildConvention, sourceRootContext } from './repo-conventions.js';
 
 export type JsonValue =
   | null
@@ -98,8 +101,20 @@ export async function buildFromDirectory(
   options: BuildCanonicalBundleOptions = {},
 ): Promise<BuildStats> {
   const module = loadNativeModule();
+  const rootDir = resolveInputRoot(inputDir);
+  const convention = await loadBuildConvention(rootDir);
+  if (!convention) {
+    return mapPlainBuildStats(
+      module.buildArtifactFromDirectory(inputDir, outputPath, mapBuildOptions(options)),
+    );
+  }
+  const documents = await collectConventionDocuments(module, inputDir, 'build');
   return mapPlainBuildStats(
-    module.buildArtifactFromDirectory(inputDir, outputPath, mapBuildOptions(options)),
+    module.buildArtifact(
+      outputPath,
+      documents.map(mapBuildDocument),
+      mapBuildOptions(withSourceRootOptions(options, rootDir)),
+    ),
   );
 }
 
@@ -120,8 +135,20 @@ export async function buildCanonicalBundleFromDirectory(
   options: BuildCanonicalBundleOptions = {},
 ): Promise<CanonicalBuildStats> {
   const module = loadNativeModule();
+  const rootDir = resolveInputRoot(inputDir);
+  const convention = await loadBuildConvention(rootDir);
+  if (!convention) {
+    return mapBuildStats(
+      module.buildCanonicalBundleFromDirectory(inputDir, outputDir, mapBuildOptions(options)),
+    );
+  }
+  const documents = await collectConventionDocuments(module, inputDir, 'build-bundle');
   return mapBuildStats(
-    module.buildCanonicalBundleFromDirectory(inputDir, outputDir, mapBuildOptions(options)),
+    module.buildCanonicalBundle(
+      outputDir,
+      documents.map(mapBuildDocument),
+      mapBuildOptions(withSourceRootOptions(options, rootDir)),
+    ),
   );
 }
 
@@ -138,6 +165,7 @@ export async function updateBuildCache(
       cachePath,
       nativeDocuments,
       removedRelativePaths,
+      false,
       mapBuildOptions(options),
     ),
   );
@@ -150,12 +178,36 @@ export async function updateBuildCacheFromDirectory(
   updateMode: DirectoryUpdateMode = {},
 ): Promise<IncrementalBuildStats> {
   const module = loadNativeModule();
+  const rootDir = resolveInputRoot(inputDir);
+  const convention = await loadBuildConvention(rootDir);
+  if (!convention) {
+    return mapIncrementalBuildStats(
+      module.updateBuildCacheFromDirectory(
+        inputDir,
+        cachePath,
+        mapBuildOptions(options),
+        mapDirectoryUpdateMode(updateMode),
+      ),
+    );
+  }
+  const update = module.collectBuildCacheUpdateFromDirectory(
+    inputDir,
+    mapDirectoryUpdateMode(updateMode),
+  );
+  const originalRelativePaths = new Set(update.documents.map((document) => document.relativePath));
+  const transformed = await transformDocumentsWithConvention(update.documents, inputDir, 'update-cache');
+  const transformedRelativePaths = new Set(transformed.map((document) => document.relativePath));
+  const removedRelativePaths = [
+    ...update.removedRelativePaths,
+    ...Array.from(originalRelativePaths).filter((relativePath) => !transformedRelativePaths.has(relativePath)),
+  ];
   return mapIncrementalBuildStats(
-    module.updateBuildCacheFromDirectory(
-      inputDir,
+    module.updateBuildCacheFromDocuments(
       cachePath,
-      mapBuildOptions(options),
-      mapDirectoryUpdateMode(updateMode),
+      transformed.map(mapBuildDocument),
+      removedRelativePaths,
+      update.replaceAll,
+      mapBuildOptions(withSourceRootOptions(options, rootDir)),
     ),
   );
 }
@@ -199,6 +251,19 @@ function mapBuildDocument(document: BuildDocument): NativeBuildDocument {
     summary: document.summary,
     content: document.content,
     metadataJson: JSON.stringify(document.metadata ?? {}),
+  };
+}
+
+function mapNativeBuildDocument(document: NativeBuildDocument): BuildDocument {
+  return {
+    docId: document.docId,
+    sourcePath: document.sourcePath,
+    relativePath: document.relativePath,
+    canonicalUrl: document.canonicalUrl,
+    title: document.title,
+    summary: document.summary,
+    content: document.content,
+    metadata: JSON.parse(document.metadataJson ?? '{}') as Record<string, JsonValue>,
   };
 }
 
@@ -246,6 +311,45 @@ function mapDirectoryUpdateMode(updateMode: DirectoryUpdateMode): NativeDirector
   return {
     mode: updateMode.mode,
     baseRevision: updateMode.baseRevision,
+  };
+}
+
+async function collectConventionDocuments(
+  module: ReturnType<typeof loadNativeModule>,
+  inputDir: string,
+  command: 'build' | 'build-bundle',
+): Promise<BuildDocument[]> {
+  const rawDocuments = module.collectDocumentsFromDirectory(inputDir);
+  return transformDocumentsWithConvention(rawDocuments, inputDir, command);
+}
+
+async function transformDocumentsWithConvention(
+  rawDocuments: NativeBuildDocument[],
+  inputDir: string,
+  command: 'build' | 'build-bundle' | 'update-cache',
+): Promise<BuildDocument[]> {
+  const rootDir = resolveInputRoot(inputDir);
+  const convention = await loadBuildConvention(rootDir);
+  const documents = rawDocuments.map(mapNativeBuildDocument);
+  return applyBuildConvention(documents, convention, {
+    rootDir,
+    command,
+    ...sourceRootContext(rootDir),
+  });
+}
+
+function resolveInputRoot(inputDir: string): string {
+  return path.resolve(inputDir);
+}
+
+function withSourceRootOptions(
+  options: BuildCanonicalBundleOptions,
+  rootDir: string,
+): BuildCanonicalBundleOptions {
+  return {
+    ...options,
+    sourceRootId: options.sourceRootId ?? 'root',
+    sourceRootPath: options.sourceRootPath ?? rootDir,
   };
 }
 

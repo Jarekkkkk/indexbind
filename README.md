@@ -99,6 +99,29 @@ npx indexbind export-artifact ./index.sqlite --cache-file ./docs/.indexbind/buil
 
 CLI commands print JSON by default. Add `--text` when you want scan-friendly terminal output.
 
+## Index-Scoped Conventions
+
+If a directory needs a small amount of host-specific shaping, place optional convention files next to its `.indexbind/` output:
+
+- `indexbind.build.js`
+- `indexbind.search.js`
+
+For example, if you index `./docs`, these files live in `./docs/` and affect only the artifact rooted there.
+
+`indexbind.build.js` can:
+
+- skip selected documents
+- derive `canonicalUrl`
+- inject or normalize metadata
+- adjust title or summary before indexing
+
+`indexbind.search.js` can:
+
+- define a default search profile for CLI and Node search
+- rewrite the input query for lightweight alias expansion
+
+This keeps small repo-specific search policy attached to the native `indexbind` pipeline instead of wrapper scripts.
+
 ## Artifact Paths
 
 - Native SQLite artifact:
