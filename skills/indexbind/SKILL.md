@@ -52,6 +52,8 @@ Install and packaging docs:
   use `indexbind/build`
 - Mixed local knowledge bases that need host-defined document classification, metadata, or directory weighting:
   normalize documents in the host first, then pass them to `indexbind/build`
+- A mostly-default local docs or knowledge-base directory that only needs light host policy:
+  use `indexbind.build.js` and `indexbind.search.js` beside that directory’s `.indexbind/`
 - Browser or standard worker querying over a canonical bundle:
   use `indexbind/web`
 - Cloudflare Worker querying:
@@ -84,18 +86,50 @@ Concepts:
 
 Typical CLI commands:
 
-- `npx indexbind build ./docs ./index.sqlite`
-- `npx indexbind build-bundle ./docs ./index.bundle`
-- `npx indexbind update-cache ./docs ./.indexbind-cache.sqlite --git-diff`
-- `npx indexbind build <input-dir> <output-file>`
-- `npx indexbind build-bundle <input-dir> <output-dir>`
-- `npx indexbind update-cache <input-dir> <cache-file> [--git-diff] [--git-base <rev>]`
-- `npx indexbind export-artifact <cache-file> <output-file>`
-- `npx indexbind export-bundle <cache-file> <output-dir>`
+- `npx indexbind build ./docs`
+- `npx indexbind build-bundle ./docs`
+- `npx indexbind update-cache ./docs --git-diff`
+- `npx indexbind build [input-dir] [output-file] [--backend <hashing|model-id>]`
+- `npx indexbind build-bundle [input-dir] [output-dir] [--backend <hashing|model-id>]`
+- `npx indexbind update-cache [input-dir] [cache-file] [--git-diff] [--git-base <rev>] [--backend <hashing|model-id>]`
+- `npx indexbind export-artifact <output-file> [--cache-file <path>]`
+- `npx indexbind export-bundle <output-dir> [--cache-file <path>]`
 - `npx indexbind inspect <artifact-file>`
+- `npx indexbind search <artifact-file> <query>`
 - `npx indexbind benchmark <artifact-file> <queries-json>`
 
 Use `indexbind/build` instead when the host already has documents in memory or wants tighter control from code.
+
+## Index-scoped conventions
+
+When one indexed root only needs a small amount of host-specific behavior, place convention files beside that root:
+
+```text
+docs/
+  indexbind.build.js
+  indexbind.search.js
+  .indexbind/
+```
+
+Use `indexbind.build.js` when the default directory scanner is already correct and you only need to:
+
+- skip a few files from indexing
+- derive `canonicalUrl`
+- inject metadata such as `is_default_searchable`, `source_root`, `content_kind`, or `directory_weight`
+- normalize `title` or `summary`
+
+Use `indexbind.search.js` when CLI or Node search should automatically apply:
+
+- a default search profile
+- a metadata filter
+- score adjustment defaults
+- lightweight query rewrite or alias expansion
+
+These convention files are index-scoped, not repo-global:
+
+- if you index `./docs`, the files live in `./docs/`
+- they affect only that indexed root
+- there is no repo-root fallback
 
 ## Common APIs
 
@@ -117,6 +151,7 @@ Use these APIs when the host already has documents or wants tighter control:
 Docs:
 - `https://indexbind.jolestar.workers.dev/reference/api.md`
 - `https://indexbind.jolestar.workers.dev/guides/adoption-examples.md`
+- `https://indexbind.jolestar.workers.dev/reference/cli.md`
 
 ## Cloudflare rule
 
