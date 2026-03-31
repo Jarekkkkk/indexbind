@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use ignore::{DirEntry, WalkBuilder};
 use indexbind_core::{
     build_artifact, build_canonical_artifact, export_artifact_from_build_cache,
     export_canonical_from_build_cache, update_build_cache, BuildArtifactOptions, BuildCacheUpdate,
@@ -10,8 +11,9 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use walkdir::WalkDir;
 use yaml_rust2::{yaml::Hash as YamlHash, Yaml, YamlLoader};
+
+const IGNORED_DIRECTORY_NAMES: &[&str] = &["node_modules", "target", "dist", "build"];
 
 #[derive(Debug, Clone, Default)]
 pub enum DirectoryUpdateMode {
@@ -107,11 +109,11 @@ fn read_documents_for_relative_paths(
     relative_paths: Option<&BTreeSet<String>>,
 ) -> Result<Vec<NormalizedDocument>> {
     let mut documents = Vec::new();
-    for entry in WalkDir::new(root)
-        .into_iter()
-        .filter_map(std::result::Result::ok)
-    {
-        if !entry.file_type().is_file() || !supported_extension(entry.path()) {
+    for entry in build_document_walk(root) {
+        let entry = entry?;
+        if !entry.file_type().is_some_and(|file_type| file_type.is_file())
+            || !supported_extension(entry.path())
+        {
             continue;
         }
         let path = entry.path();
@@ -137,6 +139,21 @@ fn read_documents_for_relative_paths(
         });
     }
     Ok(documents)
+}
+
+#[cfg(test)]
+fn collect_document_relative_paths(root: &Path) -> Result<BTreeSet<String>> {
+    let mut relative_paths = BTreeSet::new();
+    for entry in build_document_walk(root) {
+        let entry = entry?;
+        if !entry.file_type().is_some_and(|file_type| file_type.is_file())
+            || !supported_extension(entry.path())
+        {
+            continue;
+        }
+        relative_paths.insert(relative_path(root, entry.path())?);
+    }
+    Ok(relative_paths)
 }
 
 fn read_directory_update(root: &Path, mode: DirectoryUpdateMode) -> Result<BuildCacheUpdate> {
@@ -198,6 +215,36 @@ fn read_git_diff_update(root: &Path, base_revision: Option<String>) -> Result<Bu
         removed_relative_paths: removed.into_iter().collect(),
         replace_all: false,
     })
+}
+
+fn build_document_walk(root: &Path) -> ignore::Walk {
+    let mut builder = WalkBuilder::new(root);
+    builder
+        .hidden(true)
+        .parents(true)
+        .git_ignore(true)
+        .git_exclude(true)
+        .git_global(false)
+        .require_git(false)
+        .ignore(false)
+        .filter_entry(|entry| should_walk_entry(entry));
+    builder.build()
+}
+
+fn should_walk_entry(entry: &DirEntry) -> bool {
+    if entry.depth() == 0 {
+        return true;
+    }
+    let Some(file_type) = entry.file_type() else {
+        return true;
+    };
+    if !file_type.is_dir() {
+        return true;
+    }
+    let Some(name) = entry.path().file_name().and_then(|name| name.to_str()) else {
+        return true;
+    };
+    !IGNORED_DIRECTORY_NAMES.contains(&name)
 }
 
 #[derive(Debug, PartialEq)]
@@ -468,7 +515,8 @@ fn _debug_root(path: &PathBuf) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        parse_document_source, read_documents, update_cache_from_directory_with_mode,
+        collect_document_relative_paths, parse_document_source, read_documents,
+        update_cache_from_directory_with_mode,
         DirectoryUpdateMode,
     };
     use anyhow::{anyhow, Result};
@@ -580,6 +628,78 @@ Body
         assert_eq!(document.canonical_url.as_deref(), Some("/docs/guide"));
         assert_eq!(document.metadata.get("section"), Some(&json!("docs")));
         assert_eq!(document.content.trim_start(), "# Ignored Heading\n\nBody\n");
+    }
+
+    #[test]
+    fn read_documents_ignores_hidden_and_generated_paths() {
+        let tempdir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(tempdir.path().join("visible")).unwrap();
+        fs::create_dir_all(tempdir.path().join(".hidden")).unwrap();
+        fs::create_dir_all(tempdir.path().join("node_modules/pkg")).unwrap();
+        fs::create_dir_all(tempdir.path().join("dist/docs")).unwrap();
+        fs::write(tempdir.path().join("visible/guide.md"), "# Visible\n\nBody\n").unwrap();
+        fs::write(tempdir.path().join(".hidden/secret.md"), "# Secret\n\nHidden\n").unwrap();
+        fs::write(
+            tempdir.path().join("node_modules/pkg/readme.md"),
+            "# Dependency\n\nIgnored\n",
+        )
+        .unwrap();
+        fs::write(tempdir.path().join("dist/docs/output.md"), "# Output\n\nIgnored\n").unwrap();
+
+        let documents = read_documents(tempdir.path()).unwrap();
+        assert_eq!(documents.len(), 1);
+        assert_eq!(documents[0].relative_path, "visible/guide.md");
+    }
+
+    #[test]
+    fn read_documents_allows_explicit_hidden_root() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let hidden_root = tempdir.path().join(".notes");
+        fs::create_dir_all(&hidden_root).unwrap();
+        fs::write(hidden_root.join("guide.md"), "# Guide\n\nBody\n").unwrap();
+
+        let documents = read_documents(&hidden_root).unwrap();
+        assert_eq!(documents.len(), 1);
+        assert_eq!(documents[0].relative_path, "guide.md");
+    }
+
+    #[test]
+    fn read_documents_respects_gitignore_rules() {
+        let tempdir = tempfile::tempdir().unwrap();
+        fs::write(
+            tempdir.path().join(".gitignore"),
+            "ignored.md\nnested/*\n!nested/keep.md\n",
+        )
+        .unwrap();
+        fs::create_dir_all(tempdir.path().join("nested")).unwrap();
+        fs::write(tempdir.path().join("guide.md"), "# Guide\n\nBody\n").unwrap();
+        fs::write(tempdir.path().join("ignored.md"), "# Ignored\n\nBody\n").unwrap();
+        fs::write(tempdir.path().join("nested/skip.md"), "# Skip\n\nBody\n").unwrap();
+        fs::write(tempdir.path().join("nested/keep.md"), "# Keep\n\nBody\n").unwrap();
+
+        let documents = read_documents(tempdir.path()).unwrap();
+        let mut relative_paths = documents
+            .into_iter()
+            .map(|document| document.relative_path)
+            .collect::<Vec<_>>();
+        relative_paths.sort();
+        assert_eq!(relative_paths, vec!["guide.md", "nested/keep.md"]);
+    }
+
+    #[test]
+    fn collect_document_relative_paths_matches_scan_rules() {
+        let tempdir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(tempdir.path().join("docs")).unwrap();
+        fs::create_dir_all(tempdir.path().join("build")).unwrap();
+        fs::write(tempdir.path().join("docs/guide.md"), "# Guide\n\nBody\n").unwrap();
+        fs::write(tempdir.path().join("build/generated.md"), "# Generated\n\nBody\n").unwrap();
+        fs::write(tempdir.path().join(".hidden.md"), "# Hidden\n\nBody\n").unwrap();
+
+        let relative_paths = collect_document_relative_paths(tempdir.path()).unwrap();
+        assert_eq!(
+            relative_paths.into_iter().collect::<Vec<_>>(),
+            vec!["docs/guide.md"]
+        );
     }
 
     #[test]

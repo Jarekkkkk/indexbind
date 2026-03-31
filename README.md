@@ -61,36 +61,40 @@ npm run build:native:release
 1. Build a native SQLite artifact for Node:
 
 ```bash
-npx indexbind build ./docs ./index.sqlite
+npx indexbind build ./docs
 ```
+
+This writes the artifact to `./docs/.indexbind/index.sqlite` by default.
 
 2. Query it from Node:
 
 ```ts
 import { openIndex } from 'indexbind';
 
-const index = await openIndex('./index.sqlite');
+const index = await openIndex('./docs/.indexbind/index.sqlite');
 const hits = await index.search('rust guide');
 ```
 
 Or query it directly from the CLI:
 
 ```bash
-npx indexbind search ./index.sqlite "rust guide"
-npx indexbind search ./index.sqlite "rust guide" --text
+npx indexbind search ./docs/.indexbind/index.sqlite "rust guide"
+npx indexbind search ./docs/.indexbind/index.sqlite "rust guide" --text
 ```
 
 3. Build a canonical bundle for browsers and Workers:
 
 ```bash
-npx indexbind build-bundle ./docs ./index.bundle
+npx indexbind build-bundle ./docs
 ```
+
+This writes the bundle to `./docs/.indexbind/index.bundle/` by default.
 
 4. Or keep a mutable build cache and export fresh artifacts from it:
 
 ```bash
-npx indexbind update-cache ./docs ./.indexbind-cache.sqlite --git-diff
-npx indexbind export-artifact ./.indexbind-cache.sqlite ./index.sqlite
+npx indexbind update-cache ./docs --git-diff
+npx indexbind export-artifact ./index.sqlite --cache-file ./docs/.indexbind/build-cache.sqlite
 ```
 
 CLI commands print JSON by default. Add `--text` when you want scan-friendly terminal output.

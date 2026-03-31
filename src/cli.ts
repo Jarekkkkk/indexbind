@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { openIndex, type DocumentHit, type SearchOptions } from './index.js';
 import {
   benchmarkArtifact,
@@ -19,6 +21,11 @@ interface SearchEnvelope {
   hitCount: number;
   hits: DocumentHit[];
 }
+
+const DEFAULT_INDEX_DIR = '.indexbind';
+const DEFAULT_CACHE_FILE = 'build-cache.sqlite';
+const DEFAULT_ARTIFACT_FILE = 'index.sqlite';
+const DEFAULT_BUNDLE_DIR = 'index.bundle';
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -56,8 +63,7 @@ async function main(): Promise<void> {
         await searchCommand(rest);
         break;
       default:
-        await buildLegacyCommand(commandOrInput, rest);
-        break;
+        throw new Error(usage());
     }
   } catch (error) {
     if (error instanceof Error) {
@@ -74,13 +80,14 @@ async function buildCommand(args: string[]): Promise<void> {
     printUsage(buildUsage());
     return;
   }
-  const { outputMode, args: filteredArgs } = extractOutputMode(args);
-  const [inputDir, outputPath, backend] = filteredArgs;
-  if (!inputDir || !outputPath || filteredArgs.length > 3) {
-    throw new Error(usage());
-  }
-
-  const stats = await buildFromDirectory(inputDir, outputPath, parseBuildOptions(backend));
+  const { outputMode, inputDir, outputPath, buildOptions } = parseDirectoryBuildArgs(
+    args,
+    buildUsage(),
+    defaultArtifactPath,
+  );
+  await assertInputDirectory(inputDir);
+  await ensureParentDirectory(outputPath);
+  const stats = await buildFromDirectory(inputDir, outputPath, buildOptions);
   emit(
     outputMode,
     stats,
@@ -93,16 +100,17 @@ async function buildBundleCommand(args: string[]): Promise<void> {
     printUsage(buildBundleUsage());
     return;
   }
-  const { outputMode, args: filteredArgs } = extractOutputMode(args);
-  const [inputDir, outputDir, backend] = filteredArgs;
-  if (!inputDir || !outputDir || filteredArgs.length > 3) {
-    throw new Error(usage());
-  }
-
+  const { outputMode, inputDir, outputPath: outputDir, buildOptions } = parseDirectoryBuildArgs(
+    args,
+    buildBundleUsage(),
+    defaultBundlePath,
+  );
+  await assertInputDirectory(inputDir);
+  await ensureParentDirectory(outputDir);
   const stats = await buildCanonicalBundleFromDirectory(
     inputDir,
     outputDir,
-    parseBuildOptions(backend),
+    buildOptions,
   );
   emit(
     outputMode,
@@ -120,6 +128,7 @@ async function updateCacheCommand(args: string[]): Promise<void> {
   const positional: string[] = [];
   let useGitDiff = false;
   let gitBase: string | undefined;
+  let backend: string | undefined;
 
   for (let index = 0; index < filteredArgs.length; index += 1) {
     const value = filteredArgs[index];
@@ -136,20 +145,25 @@ async function updateCacheCommand(args: string[]): Promise<void> {
       index += 1;
       continue;
     }
+    if (value === '--backend') {
+      backend = requireFlagValue('--backend', filteredArgs[index + 1]);
+      index += 1;
+      continue;
+    }
     if (value.startsWith('--')) {
-      throw new Error(usage());
+      throw new Error(updateCacheUsage());
     }
     positional.push(value);
   }
 
-  if (positional.length < 2 || positional.length > 3) {
-    throw new Error(usage());
+  if (positional.length > 2) {
+    throw new Error(updateCacheUsage());
   }
 
-  const [inputDir, cachePath, backend] = positional;
-  if (!inputDir || !cachePath) {
-    throw new Error(usage());
-  }
+  const inputDir = positional[0] ?? '.';
+  const cachePath = positional[1] ?? defaultCachePath(inputDir);
+  await assertInputDirectory(inputDir);
+  await ensureParentDirectory(cachePath);
 
   const stats = await updateBuildCacheFromDirectory(
     inputDir,
@@ -178,11 +192,8 @@ async function exportArtifactCommand(args: string[]): Promise<void> {
     printUsage(exportArtifactUsage());
     return;
   }
-  const { outputMode, args: filteredArgs } = extractOutputMode(args);
-  const [cachePath, outputPath] = filteredArgs;
-  if (!cachePath || !outputPath || filteredArgs.length !== 2) {
-    throw new Error(usage());
-  }
+  const { outputMode, cachePath, outputPath } = parseExportCommandArgs(args, exportArtifactUsage());
+  await ensureParentDirectory(outputPath);
   const stats = await exportArtifactFromBuildCache(cachePath, outputPath);
   emit(
     outputMode,
@@ -196,11 +207,11 @@ async function exportBundleCommand(args: string[]): Promise<void> {
     printUsage(exportBundleUsage());
     return;
   }
-  const { outputMode, args: filteredArgs } = extractOutputMode(args);
-  const [cachePath, outputDir] = filteredArgs;
-  if (!cachePath || !outputDir || filteredArgs.length !== 2) {
-    throw new Error(usage());
-  }
+  const { outputMode, cachePath, outputPath: outputDir } = parseExportCommandArgs(
+    args,
+    exportBundleUsage(),
+  );
+  await ensureParentDirectory(outputDir);
   const stats = await exportCanonicalBundleFromBuildCache(cachePath, outputDir);
   emit(
     outputMode,
@@ -278,20 +289,6 @@ async function searchCommand(args: string[]): Promise<void> {
     hits,
   };
   emit(outputMode, envelope, formatSearchText(envelope));
-}
-
-async function buildLegacyCommand(inputDir: string, args: string[]): Promise<void> {
-  const { outputMode, args: filteredArgs } = extractOutputMode(args);
-  const [outputPath, backend] = filteredArgs;
-  if (!outputPath || filteredArgs.length > 2) {
-    throw new Error(usage());
-  }
-  const stats = await buildFromDirectory(inputDir, outputPath, parseBuildOptions(backend));
-  emit(
-    outputMode,
-    stats,
-    `built artifact with ${stats.documentCount} documents and ${stats.chunkCount} chunks`,
-  );
 }
 
 function parseSearchCommandArgs(args: string[]): {
@@ -403,6 +400,84 @@ function parseSearchCommandArgs(args: string[]): {
     artifactPath,
     query,
     options,
+  };
+}
+
+function parseDirectoryBuildArgs(
+  args: string[],
+  usageText: string,
+  defaultOutput: (inputDir: string) => string,
+): {
+  outputMode: OutputMode;
+  inputDir: string;
+  outputPath: string;
+  buildOptions: ReturnType<typeof parseBuildOptions>;
+} {
+  const { outputMode, args: filteredArgs } = extractOutputMode(args);
+  const positional: string[] = [];
+  let backend: string | undefined;
+
+  for (let index = 0; index < filteredArgs.length; index += 1) {
+    const value = filteredArgs[index];
+    if (value === '--backend') {
+      backend = requireFlagValue('--backend', filteredArgs[index + 1]);
+      index += 1;
+      continue;
+    }
+    if (value.startsWith('--')) {
+      throw new Error(usageText);
+    }
+    positional.push(value);
+  }
+
+  if (positional.length > 2) {
+    throw new Error(usageText);
+  }
+
+  const inputDir = positional[0] ?? '.';
+  const outputPath = positional[1] ?? defaultOutput(inputDir);
+  return {
+    outputMode,
+    inputDir,
+    outputPath,
+    buildOptions: parseBuildOptions(backend),
+  };
+}
+
+function parseExportCommandArgs(
+  args: string[],
+  usageText: string,
+): {
+  outputMode: OutputMode;
+  cachePath: string;
+  outputPath: string;
+} {
+  const { outputMode, args: filteredArgs } = extractOutputMode(args);
+  const positional: string[] = [];
+  let cachePath = defaultCachePath('.');
+
+  for (let index = 0; index < filteredArgs.length; index += 1) {
+    const value = filteredArgs[index];
+    if (value === '--cache-file') {
+      cachePath = requireFlagValue('--cache-file', filteredArgs[index + 1]);
+      index += 1;
+      continue;
+    }
+    if (value.startsWith('--')) {
+      throw new Error(usageText);
+    }
+    positional.push(value);
+  }
+
+  const [outputPath] = positional;
+  if (!outputPath || positional.length !== 1) {
+    throw new Error(usageText);
+  }
+
+  return {
+    outputMode,
+    cachePath,
+    outputPath,
   };
 }
 
@@ -547,28 +622,27 @@ function usage(): string {
   ${searchUsage()}
 
 By default, commands print JSON. Add \`--text\` for human-friendly output.
-
-For backward compatibility, \`indexbind <input-dir> <output-file> [hashing|<model-id>] [--text]\` still works.`;
+Build outputs default to <input-dir>/.indexbind/.`;
 }
 
 function buildUsage(): string {
-  return 'indexbind build <input-dir> <output-file> [hashing|<model-id>] [--text]';
+  return 'indexbind build [input-dir] [output-file] [--backend <hashing|model-id>] [--text]';
 }
 
 function buildBundleUsage(): string {
-  return 'indexbind build-bundle <input-dir> <output-dir> [hashing|<model-id>] [--text]';
+  return 'indexbind build-bundle [input-dir] [output-dir] [--backend <hashing|model-id>] [--text]';
 }
 
 function updateCacheUsage(): string {
-  return 'indexbind update-cache <input-dir> <cache-file> [hashing|<model-id>] [--git-diff] [--git-base <rev>] [--text]';
+  return 'indexbind update-cache [input-dir] [cache-file] [--backend <hashing|model-id>] [--git-diff] [--git-base <rev>] [--text]';
 }
 
 function exportArtifactUsage(): string {
-  return 'indexbind export-artifact <cache-file> <output-file> [--text]';
+  return 'indexbind export-artifact <output-file> [--cache-file <path>] [--text]';
 }
 
 function exportBundleUsage(): string {
-  return 'indexbind export-bundle <cache-file> <output-dir> [--text]';
+  return 'indexbind export-bundle <output-dir> [--cache-file <path>] [--text]';
 }
 
 function inspectUsage(): string {
@@ -581,6 +655,38 @@ function benchmarkUsage(): string {
 
 function searchUsage(): string {
   return 'usage: indexbind search <artifact-file> <query> [--top-k <n>] [--mode <hybrid|vector|lexical>] [--reranker <kind>] [--candidate-pool-size <n>] [--relative-path-prefix <prefix>] [--metadata key=value] [--score-adjust-metadata-multiplier <field>] [--min-score <float>] [--text]';
+}
+
+function defaultIndexRoot(inputDir: string): string {
+  return path.join(inputDir, DEFAULT_INDEX_DIR);
+}
+
+function defaultArtifactPath(inputDir: string): string {
+  return path.join(defaultIndexRoot(inputDir), DEFAULT_ARTIFACT_FILE);
+}
+
+function defaultBundlePath(inputDir: string): string {
+  return path.join(defaultIndexRoot(inputDir), DEFAULT_BUNDLE_DIR);
+}
+
+function defaultCachePath(inputDir: string): string {
+  return path.join(defaultIndexRoot(inputDir), DEFAULT_CACHE_FILE);
+}
+
+async function ensureParentDirectory(outputPath: string): Promise<void> {
+  await fs.mkdir(path.dirname(outputPath), { recursive: true });
+}
+
+async function assertInputDirectory(inputDir: string): Promise<void> {
+  let stats;
+  try {
+    stats = await fs.stat(inputDir);
+  } catch {
+    throw new Error(`input directory does not exist: ${inputDir}`);
+  }
+  if (!stats.isDirectory()) {
+    throw new Error(`input path is not a directory: ${inputDir}`);
+  }
 }
 
 await main();

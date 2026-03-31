@@ -11,6 +11,6 @@ Example:
 
 ```bash
 npm run build:cli
-node dist/cli.js build fixtures/benchmark/basic/docs /tmp/indexbind-basic.sqlite hashing
+node dist/cli.js build fixtures/benchmark/basic/docs /tmp/indexbind-basic.sqlite --backend hashing
 node dist/cli.js benchmark /tmp/indexbind-basic.sqlite fixtures/benchmark/basic/queries.json
 ```

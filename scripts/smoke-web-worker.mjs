@@ -35,6 +35,7 @@ for (const testCase of cases) {
       'build-bundle',
       fixtureDocs,
       testCase.bundleDir,
+      '--backend',
       testCase.backendArg,
     ],
     repoRoot,

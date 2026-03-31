@@ -31,11 +31,12 @@ fs.writeFileSync(
   path.join(docsDir, 'rust.md'),
   '# Rust Guide\n\nRust retrieval guide for local search.\n',
 );
+fs.writeFileSync(path.join(docsDir, '.hidden.md'), '# Hidden\n\nShould not be indexed.\n');
 
-const cliArtifactPath = path.join(tempDir, 'cli.sqlite');
+const cliArtifactPath = path.join(docsDir, '.indexbind', 'index.sqlite');
 const buildOutput = capture(
   npmCommand,
-  ['exec', '--', 'indexbind', 'build', docsDir, cliArtifactPath, 'hashing'],
+  ['exec', '--', 'indexbind', 'build', docsDir, '--backend', 'hashing'],
   tempDir,
 );
 const buildStats = JSON.parse(buildOutput);
@@ -97,6 +98,28 @@ const helpResult = spawnSync(
 
 if (helpResult.status !== 0 || !`${helpResult.stdout}${helpResult.stderr}`.includes('indexbind search <artifact-file> <query>')) {
   throw new Error(`Unexpected CLI help output: ${helpResult.stdout}${helpResult.stderr}`);
+}
+
+const cachePath = path.join(docsDir, '.indexbind', 'build-cache.sqlite');
+const updateCacheOutput = capture(
+  npmCommand,
+  ['exec', '--', 'indexbind', 'update-cache', docsDir, '--backend', 'hashing'],
+  tempDir,
+);
+const updateCacheStats = JSON.parse(updateCacheOutput);
+if (updateCacheStats.activeDocumentCount !== 1) {
+  throw new Error(`Unexpected update-cache output: ${updateCacheOutput}`);
+}
+
+const exportedArtifactPath = path.join(tempDir, 'from-cache.sqlite');
+const exportOutput = capture(
+  npmCommand,
+  ['exec', '--', 'indexbind', 'export-artifact', exportedArtifactPath, '--cache-file', cachePath],
+  tempDir,
+);
+const exportStats = JSON.parse(exportOutput);
+if (exportStats.documentCount !== 1 || !fs.existsSync(exportedArtifactPath)) {
+  throw new Error(`Unexpected export-artifact output: ${exportOutput}`);
 }
 
 const verifyScript = path.join(tempDir, 'verify.mjs');
