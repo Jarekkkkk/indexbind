@@ -161,8 +161,8 @@ Typical flow:
 3. let the host tool open the new artifact locally
 
 ```bash
-npx indexbind update-cache ./workspace-docs ./.indexbind-cache.sqlite --git-diff
-npx indexbind export-artifact ./.indexbind-cache.sqlite ./workspace.sqlite
+npx indexbind update-cache ./workspace-docs --git-diff
+npx indexbind export-artifact ./workspace.sqlite --cache-file ./workspace-docs/.indexbind/build-cache.sqlite
 ```
 
 ```ts

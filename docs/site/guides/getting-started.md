@@ -65,15 +65,17 @@ Workers deployment notes for retrieval.
 For a local docs folder:
 
 ```bash
-npx indexbind build ./docs ./index.sqlite
+npx indexbind build ./docs
 ```
+
+This writes the artifact to `./docs/.indexbind/index.sqlite` by default.
 
 ## Query It from Node
 
 ```ts
 import { openIndex } from 'indexbind';
 
-const index = await openIndex('./index.sqlite');
+const index = await openIndex('./docs/.indexbind/index.sqlite');
 const hits = await index.search('rust guide', {
   topK: 5,
   mode: 'hybrid',
@@ -106,8 +108,8 @@ Use the native SQLite artifact when your runtime is Node and you want the simple
 You can also sanity-check the artifact from the CLI:
 
 ```bash
-npx indexbind search ./index.sqlite "rust guide"
-npx indexbind search ./index.sqlite "rust guide" --text
+npx indexbind search ./docs/.indexbind/index.sqlite "rust guide"
+npx indexbind search ./docs/.indexbind/index.sqlite "rust guide" --text
 ```
 
 CLI commands print JSON by default, which is useful for scripts and agents. Add `--text` for a shorter terminal summary.
@@ -117,8 +119,10 @@ CLI commands print JSON by default, which is useful for scripts and agents. Add 
 The canonical bundle is the portable artifact for browsers and workers:
 
 ```bash
-npx indexbind build-bundle ./docs ./index.bundle
+npx indexbind build-bundle ./docs
 ```
+
+This writes the bundle to `./docs/.indexbind/index.bundle/` by default.
 
 You can also build the same bundle programmatically:
 
@@ -146,9 +150,9 @@ await buildCanonicalBundle('./index.bundle', [
 If you rebuild the same local corpus repeatedly, keep a mutable cache and export fresh artifacts from it:
 
 ```bash
-npx indexbind update-cache ./docs ./.indexbind-cache.sqlite --git-diff
-npx indexbind export-artifact ./.indexbind-cache.sqlite ./index.sqlite
-npx indexbind export-bundle ./.indexbind-cache.sqlite ./index.bundle
+npx indexbind update-cache ./docs --git-diff
+npx indexbind export-artifact ./index.sqlite --cache-file ./docs/.indexbind/build-cache.sqlite
+npx indexbind export-bundle ./index.bundle --cache-file ./docs/.indexbind/build-cache.sqlite
 ```
 
 Use this path when:
@@ -162,7 +166,7 @@ Use this path when:
 ```ts
 import { openWebIndex } from 'indexbind/web';
 
-const index = await openWebIndex('./index.bundle');
+const index = await openWebIndex('./docs/.indexbind/index.bundle');
 const hits = await index.search('rust guide');
 ```
 
@@ -182,8 +186,8 @@ Use the canonical bundle when you want the same retrieval data to work in browse
 Inspect a native SQLite artifact:
 
 ```bash
-npx indexbind inspect ./index.sqlite
-npx indexbind inspect ./index.sqlite --text
+npx indexbind inspect ./docs/.indexbind/index.sqlite
+npx indexbind inspect ./docs/.indexbind/index.sqlite --text
 ```
 
 Run the bundled regression fixture:

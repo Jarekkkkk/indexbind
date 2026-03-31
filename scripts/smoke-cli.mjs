@@ -11,52 +11,83 @@ const cliPath = path.join(repoRoot, 'dist/cli.js');
 ensureBuiltArtifacts();
 
 assertHelp(['--help'], 'usage:');
-assertHelp(['build', '--help'], 'indexbind build <input-dir> <output-file>');
-assertHelp(['build-bundle', '--help'], 'indexbind build-bundle <input-dir> <output-dir>');
-assertHelp(['update-cache', '--help'], 'indexbind update-cache <input-dir> <cache-file>');
-assertHelp(['export-artifact', '--help'], 'indexbind export-artifact <cache-file> <output-file>');
-assertHelp(['export-bundle', '--help'], 'indexbind export-bundle <cache-file> <output-dir>');
+assertHelp(['build', '--help'], 'indexbind build [input-dir] [output-file]');
+assertHelp(['build-bundle', '--help'], 'indexbind build-bundle [input-dir] [output-dir]');
+assertHelp(['update-cache', '--help'], 'indexbind update-cache [input-dir] [cache-file]');
+assertHelp(['export-artifact', '--help'], 'indexbind export-artifact <output-file>');
+assertHelp(['export-bundle', '--help'], 'indexbind export-bundle <output-dir>');
 assertHelp(['inspect', '--help'], 'indexbind inspect <artifact-file>');
 assertHelp(['benchmark', '--help'], 'indexbind benchmark <artifact-file> <queries-json>');
 assertHelp(['search', '--help'], 'indexbind search <artifact-file> <query>');
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'indexbind-cli-smoke-'));
 const docsDir = path.join(tempDir, 'docs');
-const artifactPath = path.join(tempDir, 'index.sqlite');
+const defaultArtifactPath = path.join(docsDir, '.indexbind', 'index.sqlite');
+const explicitArtifactPath = path.join(tempDir, 'explicit.sqlite');
+const cachePath = path.join(docsDir, '.indexbind', 'build-cache.sqlite');
+const exportedArtifactPath = path.join(tempDir, 'from-cache.sqlite');
 fs.mkdirSync(docsDir, { recursive: true });
 fs.writeFileSync(path.join(docsDir, 'rust.md'), '# Rust Guide\n\nRust retrieval guide for local search.\n');
+fs.writeFileSync(path.join(docsDir, '.hidden.md'), '# Hidden\n\nShould not be indexed.\n');
+fs.mkdirSync(path.join(docsDir, 'node_modules', 'pkg'), { recursive: true });
+fs.writeFileSync(
+  path.join(docsDir, 'node_modules', 'pkg', 'README.md'),
+  '# Dependency\n\nShould not be indexed.\n',
+);
+fs.writeFileSync(path.join(docsDir, '.gitignore'), 'ignored.md\nnested/*\n!nested/keep.md\n');
+fs.mkdirSync(path.join(docsDir, 'nested'), { recursive: true });
+fs.writeFileSync(path.join(docsDir, 'ignored.md'), '# Ignored\n\nIgnored by gitignore.\n');
+fs.writeFileSync(path.join(docsDir, 'nested', 'skip.md'), '# Skip\n\nIgnored by gitignore.\n');
+fs.writeFileSync(path.join(docsDir, 'nested', 'keep.md'), '# Keep\n\nAllowed by negation.\n');
 
-runCli(['build', docsDir, artifactPath, 'hashing']);
+runCli(['build', docsDir, '--backend', 'hashing']);
+if (!fs.existsSync(defaultArtifactPath)) {
+  throw new Error(`Expected default artifact at ${defaultArtifactPath}`);
+}
+runCli(['build', docsDir, explicitArtifactPath, '--backend', 'hashing']);
 const vectorSearchResult = JSON.parse(
-  captureCli(['search', artifactPath, 'rust guide', '--mode', 'vector', '--top-k', '1']),
+  captureCli(['search', explicitArtifactPath, 'rust guide', '--mode', 'vector', '--top-k', '1']),
 );
 if (vectorSearchResult.options?.mode !== 'vector') {
   throw new Error(`Expected vector mode search output, got ${JSON.stringify(vectorSearchResult)}`);
 }
 
 const lexicalSearchResult = JSON.parse(
-  captureCli(['search', artifactPath, 'rust guide', '--mode', 'lexical', '--top-k', '1']),
+  captureCli(['search', explicitArtifactPath, 'rust guide', '--mode', 'lexical', '--top-k', '1']),
 );
 if (lexicalSearchResult.options?.mode !== 'lexical') {
   throw new Error(`Expected lexical mode search output, got ${JSON.stringify(lexicalSearchResult)}`);
 }
+if (lexicalSearchResult.hits.some((hit) => hit.relativePath !== 'rust.md')) {
+  throw new Error(`Expected ignored files to stay out of the index, got ${JSON.stringify(lexicalSearchResult)}`);
+}
 
-const literalQueryResult = JSON.parse(captureCli(['search', artifactPath, '--', '--help']));
+runCli(['update-cache', docsDir, '--backend', 'hashing']);
+if (!fs.existsSync(cachePath)) {
+  throw new Error(`Expected default cache at ${cachePath}`);
+}
+runCli(['export-artifact', exportedArtifactPath, '--cache-file', cachePath]);
+if (!fs.existsSync(exportedArtifactPath)) {
+  throw new Error(`Expected exported artifact at ${exportedArtifactPath}`);
+}
+
+const literalQueryResult = JSON.parse(captureCli(['search', explicitArtifactPath, '--', '--help']));
 if (literalQueryResult.query !== '--help') {
   throw new Error(`Expected literal query --help, got ${JSON.stringify(literalQueryResult)}`);
 }
 
 assertFailure(
-  ['search', artifactPath, 'rust guide', '--hybrid', 'true'],
+  ['search', explicitArtifactPath, 'rust guide', '--hybrid', 'true'],
   'The --hybrid flag has been removed.',
 );
+assertFailure(['build', docsDir, explicitArtifactPath, 'extra-arg'], 'indexbind build [input-dir] [output-file]');
 
 if (lexicalSearchResult.query !== 'rust guide') {
   throw new Error(`Expected search query rust guide, got ${JSON.stringify(lexicalSearchResult)}`);
 }
 
 const { openIndex } = await import(pathToFileURL(path.join(repoRoot, 'dist/index.js')).href);
-const index = await openIndex(artifactPath);
+const index = await openIndex(explicitArtifactPath);
 const lexicalHits = await index.search('rust guide', { mode: 'lexical' });
 if (!lexicalHits[0] || lexicalHits[0].relativePath !== 'rust.md') {
   throw new Error(`Expected lexical mode API search hit, got ${JSON.stringify(lexicalHits)}`);
@@ -66,7 +97,7 @@ if (!apiHits[0] || apiHits[0].relativePath !== 'rust.md') {
   throw new Error(`Expected vector mode API search hit, got ${JSON.stringify(apiHits)}`);
 }
 
-const lexicalProfileIndex = await openIndex(artifactPath, { modeProfile: 'lexical' });
+const lexicalProfileIndex = await openIndex(explicitArtifactPath, { modeProfile: 'lexical' });
 const lexicalProfileHits = await lexicalProfileIndex.search('rust guide');
 if (!lexicalProfileHits[0] || lexicalProfileHits[0].relativePath !== 'rust.md') {
   throw new Error(

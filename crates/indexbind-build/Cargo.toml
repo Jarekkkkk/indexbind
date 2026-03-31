@@ -10,9 +10,9 @@ description = "Build helpers for generating indexbind artifacts."
 
 [dependencies]
 anyhow.workspace = true
+ignore.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-walkdir.workspace = true
 yaml-rust2.workspace = true
 indexbind-core = { path = "../indexbind-core" }
 
