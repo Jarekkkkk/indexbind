@@ -1,6 +1,6 @@
 ---
 name: indexbind
-version: 1.0.0
+version: 1.0.1
 description: Use when an agent needs to install or use indexbind from Node, browsers, Web Workers, or Cloudflare Workers. This skill helps choose the right package, CLI, artifact, and entrypoint, and points to the live markdown docs for details.
 ---
 
