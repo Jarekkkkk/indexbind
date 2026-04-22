@@ -25,7 +25,7 @@ pub use canonical::{
     CanonicalDocumentRecord, CanonicalPosting, CanonicalPostings,
 };
 pub use chunking::ChunkingOptions;
-pub use embedding::EmbeddingBackend;
+pub use embedding::{Embedder, EmbeddingBackend};
 pub use error::{IndexbindError, Result};
 pub use lexical::{
     estimate_token_count, normalize_for_heuristic, tokenize as lexical_tokenize,
