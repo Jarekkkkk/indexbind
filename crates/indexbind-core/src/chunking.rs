@@ -2,6 +2,22 @@ use crate::lexical::estimate_token_count;
 use crate::types::StoredChunk;
 use pulldown_cmark::{Event, Parser, Tag};
 
+/// Strip markdown syntax from text, returning plain text only.
+pub fn strip_markdown(text: &str) -> String {
+    let parser = Parser::new(text);
+    let mut result = String::new();
+
+    for event in parser {
+        match event {
+            Event::Text(t) | Event::Code(t) => result.push_str(&t),
+            Event::SoftBreak | Event::HardBreak => result.push(' '),
+            _ => {} // Skip links, images, HTML tags, etc.
+        }
+    }
+
+    result.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 #[derive(Debug, Clone)]
 pub struct ChunkingOptions {
     pub target_tokens: usize,
@@ -101,7 +117,9 @@ pub fn chunk_document(doc_id: &str, content: &str, options: &ChunkingOptions) ->
         }
 
         let char_end = char_start.saturating_add(text.len());
-        let excerpt = text.chars().take(280).collect::<String>();
+        // Strip markdown from excerpt for clean display
+        let clean_text = strip_markdown(&text);
+        let excerpt = clean_text.chars().take(280).collect::<String>();
 
         // Only add chunk if it contains meaningful content
         if is_meaningful_chunk(&text) {
@@ -176,7 +194,7 @@ fn split_blocks(content: &str) -> Vec<Block> {
     blocks
 }
 
-fn parse_heading(line: &str) -> Option<(usize, &str)> {
+fn parse_heading(line: &str) -> Option<(usize, String)> {
     let trimmed = line.trim();
     let prefix_len = trimmed.chars().take_while(|ch| *ch == '#').count();
     if prefix_len == 0 || prefix_len > 6 {
@@ -186,7 +204,8 @@ fn parse_heading(line: &str) -> Option<(usize, &str)> {
     if heading.is_empty() {
         return None;
     }
-    Some((prefix_len, heading))
+    // Strip markdown from heading to get plain text
+    Some((prefix_len, strip_markdown(heading)))
 }
 
 fn estimate_tokens(text: &str) -> usize {
