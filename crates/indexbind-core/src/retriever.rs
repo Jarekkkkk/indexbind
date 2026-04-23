@@ -488,11 +488,6 @@ fn fuse_documents(
                     char_end: 0,
                     score: 0.0,
                 });
-            let mut metadata = document.metadata.clone();
-            metadata.insert(
-                "chunk_count".into(),
-                serde_json::Value::Number(document.chunk_count.into()),
-            );
             Some(DocumentHit {
                 doc_id: document.doc_id.clone(),
                 relative_path: document.relative_path.clone(),
@@ -501,7 +496,7 @@ fn fuse_documents(
                 summary: document.summary.clone(),
                 score: fused_score.score,
                 best_match,
-                metadata,
+                metadata: document.metadata.clone(),
             })
         })
         .collect::<Vec<_>>();
