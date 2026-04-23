@@ -18,53 +18,19 @@ impl Default for ChunkingOptions {
 }
 
 /// Check if a chunk contains meaningful content for search.
-/// Filters out chunks that are predominantly links, navigation, or too short.
+/// Filters out chunks that are predominantly links or HTML navigation blocks.
 fn is_meaningful_chunk(text: &str) -> bool {
     let parser = Parser::new(text);
     let mut text_len = 0;
     let mut url_len = 0;
-    let mut word_count = 0;
-    let mut nav_pattern_count = 0;
-
-    let nav_patterns_en = ["home", "about", "contact", "privacy", "terms", "sitemap"];
-    let nav_patterns_cn = [
-        "首页",
-        "关于",
-        "联系",
-        "隐私",
-        "条款",
-        "网站地图",
-        "关于我们",
-        "联系我们",
-        "更多文章",
-        "返回首页",
-        "订阅",
-        "取消订阅",
-        "查看更多",
-        "点击这里",
-    ];
 
     for event in parser {
         match event {
             Event::Text(t) => {
                 text_len += t.len();
-                word_count += t.split_whitespace().count();
-                let lower = t.to_lowercase();
-
-                // Check English navigation patterns
-                nav_pattern_count += nav_patterns_en
-                    .iter()
-                    .filter(|p| lower.contains(*p))
-                    .count();
-
-                // Check Chinese navigation patterns
-                nav_pattern_count += nav_patterns_cn.iter().filter(|p| t.contains(*p)).count();
             }
             Event::Start(Tag::Link { dest_url, .. }) => {
                 url_len += dest_url.len();
-            }
-            Event::Code(_) => {
-                // Code is less meaningful for search
             }
             Event::Html(html) => {
                 // HTML blocks are typically navigation/ads
@@ -76,16 +42,6 @@ fn is_meaningful_chunk(text: &str) -> bool {
             }
             _ => {}
         }
-    }
-
-    // Filter: too many navigation patterns
-    if nav_pattern_count >= 3 {
-        return false;
-    }
-
-    // Filter: too short (minimum 25 words)
-    if word_count < 25 {
-        return false;
     }
 
     // Filter: predominantly URLs (>50% is URLs)
