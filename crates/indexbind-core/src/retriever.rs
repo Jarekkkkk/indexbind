@@ -131,10 +131,14 @@ pub struct Retriever {
 
 impl Retriever {
     pub fn open(path: &Path) -> Result<Self> {
-        Self::open_with_options(path, RetrieverOpenOptions::default())
+        Self::open_with_options(path, RetrieverOpenOptions::default(), None)
     }
 
-    pub fn open_with_options(path: &Path, options: RetrieverOpenOptions) -> Result<Self> {
+    pub fn open_with_options(
+        path: &Path,
+        options: RetrieverOpenOptions,
+        embedder: Option<Embedder>,
+    ) -> Result<Self> {
         let connection = Connection::open(path)?;
         let info = load_info(&connection)?;
         let documents = load_documents(&connection)?;
@@ -143,10 +147,15 @@ impl Retriever {
             .iter()
             .map(|entry| (entry.chunk.chunk_id, entry.chunk.clone()))
             .collect::<HashMap<_, _>>();
-        let embedder = if options.mode_profile == ModeProfile::Hybrid {
-            Some(Embedder::new(info.embedding_backend.clone())?)
-        } else {
-            None
+        let embedder = match embedder {
+            Some(e) => Some(e),
+            None => {
+                if options.mode_profile == ModeProfile::Hybrid {
+                    Some(Embedder::new(info.embedding_backend.clone())?)
+                } else {
+                    None
+                }
+            }
         };
 
         Ok(Self {
@@ -187,7 +196,7 @@ impl Retriever {
             RetrievalMode::Hybrid | RetrievalMode::Vector => {
                 let formatted_query = format_query_for_embedding(query);
                 let query_embedding = self
-                    .embedder_mut()?
+                    .embedder_ref()?
                     .embed_texts(&[formatted_query])?
                     .into_iter()
                     .next()
@@ -260,8 +269,8 @@ impl Retriever {
         Ok(())
     }
 
-    fn embedder_mut(&mut self) -> Result<&mut Embedder> {
-        self.embedder.as_mut().ok_or_else(|| {
+    fn embedder_ref(&self) -> Result<&Embedder> {
+        self.embedder.as_ref().ok_or_else(|| {
             IndexbindError::InvalidSearchConfig(
                 "embedding resources are unavailable for this index instance".to_string(),
             )
@@ -353,7 +362,7 @@ impl Retriever {
 
         match config.kind {
             RerankerKind::EmbeddingV1 => {
-                let embedder = self.embedder_mut()?;
+                let embedder = self.embedder_ref()?;
                 rerank_documents_with_embeddings(embedder, query, hits, config, top_k)
             }
             RerankerKind::HeuristicV1 => {
@@ -542,7 +551,7 @@ fn rerank_documents_with_heuristic(
 }
 
 fn rerank_documents_with_embeddings(
-    embedder: &mut Embedder,
+    embedder: &Embedder,
     query: &str,
     hits: &[DocumentHit],
     config: &RerankerOptions,
@@ -824,6 +833,7 @@ mod tests {
                 embedding_backend: EmbeddingBackend::Hashing { dimensions: 128 },
                 chunking: Default::default(),
             },
+            None,
         )
         .unwrap();
 
@@ -880,6 +890,7 @@ mod tests {
                 embedding_backend: EmbeddingBackend::Hashing { dimensions: 128 },
                 chunking: Default::default(),
             },
+            None,
         )
         .unwrap();
 
@@ -952,6 +963,7 @@ mod tests {
                 embedding_backend: EmbeddingBackend::Hashing { dimensions: 128 },
                 chunking: Default::default(),
             },
+            None,
         )
         .unwrap();
 
@@ -1188,6 +1200,7 @@ mod tests {
                 embedding_backend: EmbeddingBackend::Hashing { dimensions: 128 },
                 chunking: Default::default(),
             },
+            None,
         )
         .unwrap();
 
@@ -1354,6 +1367,7 @@ mod tests {
                 embedding_backend: EmbeddingBackend::Hashing { dimensions: 128 },
                 chunking: Default::default(),
             },
+            None,
         )
         .unwrap();
 
@@ -1400,6 +1414,7 @@ mod tests {
                 embedding_backend: EmbeddingBackend::Hashing { dimensions: 128 },
                 chunking: Default::default(),
             },
+            None,
         )
         .unwrap();
 
@@ -1408,6 +1423,7 @@ mod tests {
             RetrieverOpenOptions {
                 mode_profile: ModeProfile::Lexical,
             },
+            None,
         )
         .unwrap();
 

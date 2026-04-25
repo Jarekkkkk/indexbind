@@ -4,6 +4,7 @@ use model2vec_rs::model::StaticModel;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum EmbeddingBackend {
@@ -20,9 +21,10 @@ impl Default for EmbeddingBackend {
     }
 }
 
+#[derive(Clone)]
 pub struct Embedder {
     backend: EmbeddingBackend,
-    model2vec: Option<StaticModel>,
+    model2vec: Arc<Mutex<Option<StaticModel>>>,
 }
 
 impl Embedder {
@@ -34,19 +36,26 @@ impl Embedder {
             ),
             EmbeddingBackend::Hashing { .. } => None,
         };
-        Ok(Self { backend, model2vec })
+        Ok(Self {
+            backend,
+            model2vec: Arc::new(Mutex::new(model2vec)),
+        })
     }
 
     pub fn backend(&self) -> &EmbeddingBackend {
         &self.backend
     }
 
-    pub fn embed_texts(&mut self, inputs: &[String]) -> Result<Vec<Vec<f32>>> {
+    pub fn embed_texts(&self, inputs: &[String]) -> Result<Vec<Vec<f32>>> {
         self.embed(inputs)
     }
 
-    fn embed(&mut self, inputs: &[String]) -> Result<Vec<Vec<f32>>> {
-        match (&self.backend, self.model2vec.as_ref()) {
+    fn embed(&self, inputs: &[String]) -> Result<Vec<Vec<f32>>> {
+        let guard = self
+            .model2vec
+            .lock()
+            .map_err(|e| IndexbindError::Embedding(anyhow!("Failed to lock embedder: {e}")))?;
+        match (&self.backend, guard.as_ref()) {
             (EmbeddingBackend::Model2Vec { batch_size, .. }, Some(model)) => {
                 Ok(model.encode_with_args(inputs, Some(512), *batch_size))
             }

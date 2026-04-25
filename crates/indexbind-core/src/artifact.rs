@@ -13,8 +13,12 @@ pub fn build_artifact(
     output_path: &Path,
     documents: &[NormalizedDocument],
     options: &BuildArtifactOptions,
+    embedder: Option<&Embedder>,
 ) -> Result<BuildStats> {
-    let mut embedder = Embedder::new(options.embedding_backend.clone())?;
+    let embedder = match embedder {
+        Some(e) => e.clone(),
+        None => Embedder::new(options.embedding_backend.clone())?,
+    };
     let connection = Connection::open(output_path)?;
     initialize_schema(&connection)?;
 

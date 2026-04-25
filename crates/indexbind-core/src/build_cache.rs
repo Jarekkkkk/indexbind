@@ -74,8 +74,12 @@ pub fn update_build_cache(
     cache_path: &Path,
     update: BuildCacheUpdate,
     options: &BuildArtifactOptions,
+    embedder: Option<&Embedder>,
 ) -> Result<IncrementalBuildStats> {
-    let mut embedder = Embedder::new(options.embedding_backend.clone())?;
+    let embedder = match embedder {
+        Some(e) => e.clone(),
+        None => Embedder::new(options.embedding_backend.clone())?,
+    };
     let mut connection = Connection::open(cache_path)?;
     initialize_cache_schema(&connection)?;
     let config_changed = refresh_cache_meta(&connection, options)?;
@@ -119,7 +123,7 @@ pub fn update_build_cache(
             None => new_document_count += 1,
         }
 
-        let materialized = materialize_document(&document, options, &mut embedder)?;
+        let materialized = materialize_document(&document, options, &embedder)?;
         upsert_materialized_document(&transaction, &materialized, &options.source_root.id)?;
     }
 
@@ -579,7 +583,7 @@ fn load_cached_document_fingerprints(
 fn materialize_document(
     document: &NormalizedDocument,
     options: &BuildArtifactOptions,
-    embedder: &mut Embedder,
+    embedder: &Embedder,
 ) -> Result<MaterializedDocument> {
     let doc_id = document
         .doc_id
@@ -876,6 +880,7 @@ mod tests {
                 replace_all: true,
             },
             &options,
+            None,
         )
         .unwrap();
         assert_eq!(first.new_document_count, 2);
@@ -892,6 +897,7 @@ mod tests {
                 replace_all: true,
             },
             &options,
+            None,
         )
         .unwrap();
         assert_eq!(second.changed_document_count, 1);
@@ -919,6 +925,7 @@ mod tests {
                 replace_all: true,
             },
             &options,
+            None,
         )
         .unwrap();
 
@@ -930,6 +937,7 @@ mod tests {
                 replace_all: false,
             },
             &options,
+            None,
         )
         .unwrap();
         assert_eq!(stats.changed_document_count, 1);
@@ -956,6 +964,7 @@ mod tests {
                 replace_all: true,
             },
             &options,
+            None,
         )
         .unwrap();
 
@@ -989,6 +998,7 @@ mod tests {
                 replace_all: true,
             },
             &options,
+            None,
         )
         .unwrap();
 

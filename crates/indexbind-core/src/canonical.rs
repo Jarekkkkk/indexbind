@@ -6,13 +6,13 @@ use crate::types::{MetadataMap, NormalizedDocument};
 use crate::{IndexbindError, Result};
 #[cfg(not(target_arch = "wasm32"))]
 use anyhow::Context;
+#[cfg(not(target_arch = "wasm32"))]
+use hf_hub::api::sync::Api;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
-#[cfg(not(target_arch = "wasm32"))]
-use hf_hub::api::sync::Api;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -110,10 +110,14 @@ pub fn build_canonical_artifact(
     output_dir: &Path,
     documents: &[NormalizedDocument],
     options: &BuildArtifactOptions,
+    embedder: Option<&Embedder>,
 ) -> Result<CanonicalBuildStats> {
     fs::create_dir_all(output_dir)?;
 
-    let mut embedder = Embedder::new(options.embedding_backend.clone())?;
+    let embedder = match embedder {
+        Some(e) => e.clone(),
+        None => Embedder::new(options.embedding_backend.clone())?,
+    };
     let built_at = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|error| IndexbindError::Embedding(error.into()))?
@@ -281,7 +285,10 @@ struct BundleModelFiles {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn resolve_model_files_for_bundle(model: &str, token: Option<&str>) -> anyhow::Result<BundleModelFiles> {
+fn resolve_model_files_for_bundle(
+    model: &str,
+    token: Option<&str>,
+) -> anyhow::Result<BundleModelFiles> {
     let base = Path::new(model);
     if base.exists() {
         return resolve_local_model_files(base);
@@ -390,6 +397,7 @@ mod tests {
                 embedding_backend: EmbeddingBackend::Hashing { dimensions: 128 },
                 chunking: Default::default(),
             },
+            None,
         )
         .unwrap();
 
