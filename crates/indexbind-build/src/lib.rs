@@ -35,10 +35,12 @@ pub fn build_from_directory(
         original_path: source_root.display().to_string(),
     };
     let documents = read_documents(&source_root)?;
-    build_artifact(output, &documents, &options).map_err(Into::into)
+    build_artifact(output, &documents, &options, None).map_err(Into::into)
 }
 
-pub fn collect_documents_from_directory(input: &Path) -> Result<(SourceRoot, Vec<NormalizedDocument>)> {
+pub fn collect_documents_from_directory(
+    input: &Path,
+) -> Result<(SourceRoot, Vec<NormalizedDocument>)> {
     let source_root = input.canonicalize()?;
     let documents = read_documents(&source_root)?;
     Ok((
@@ -70,7 +72,7 @@ pub fn update_cache_from_directory_with_mode(
         original_path: source_root.display().to_string(),
     };
     match read_directory_update(&source_root, mode) {
-        Ok(update) => update_build_cache(cache_path, update, &options).map_err(Into::into),
+        Ok(update) => update_build_cache(cache_path, update, &options, None).map_err(Into::into),
         Err(_) => {
             let documents = read_documents(&source_root)?;
             update_build_cache(
@@ -81,6 +83,7 @@ pub fn update_cache_from_directory_with_mode(
                     replace_all: true,
                 },
                 &options,
+                None,
             )
             .map_err(Into::into)
         }
@@ -117,7 +120,7 @@ pub fn build_canonical_from_directory(
         original_path: source_root.display().to_string(),
     };
     let documents = read_documents(&source_root)?;
-    build_canonical_artifact(output_dir, &documents, &options).map_err(Into::into)
+    build_canonical_artifact(output_dir, &documents, &options, None).map_err(Into::into)
 }
 
 pub fn export_canonical_from_cache(
@@ -138,7 +141,9 @@ fn read_documents_for_relative_paths(
     let mut documents = Vec::new();
     for entry in build_document_walk(root) {
         let entry = entry?;
-        if !entry.file_type().is_some_and(|file_type| file_type.is_file())
+        if !entry
+            .file_type()
+            .is_some_and(|file_type| file_type.is_file())
             || !supported_extension(entry.path())
         {
             continue;
@@ -173,7 +178,9 @@ fn collect_document_relative_paths(root: &Path) -> Result<BTreeSet<String>> {
     let mut relative_paths = BTreeSet::new();
     for entry in build_document_walk(root) {
         let entry = entry?;
-        if !entry.file_type().is_some_and(|file_type| file_type.is_file())
+        if !entry
+            .file_type()
+            .is_some_and(|file_type| file_type.is_file())
             || !supported_extension(entry.path())
         {
             continue;
@@ -543,8 +550,7 @@ fn _debug_root(path: &PathBuf) -> String {
 mod tests {
     use super::{
         collect_document_relative_paths, parse_document_source, read_documents,
-        update_cache_from_directory_with_mode,
-        DirectoryUpdateMode,
+        update_cache_from_directory_with_mode, DirectoryUpdateMode,
     };
     use anyhow::{anyhow, Result};
     use indexbind_core::{BuildArtifactOptions, EmbeddingBackend};
@@ -664,14 +670,26 @@ Body
         fs::create_dir_all(tempdir.path().join(".hidden")).unwrap();
         fs::create_dir_all(tempdir.path().join("node_modules/pkg")).unwrap();
         fs::create_dir_all(tempdir.path().join("dist/docs")).unwrap();
-        fs::write(tempdir.path().join("visible/guide.md"), "# Visible\n\nBody\n").unwrap();
-        fs::write(tempdir.path().join(".hidden/secret.md"), "# Secret\n\nHidden\n").unwrap();
+        fs::write(
+            tempdir.path().join("visible/guide.md"),
+            "# Visible\n\nBody\n",
+        )
+        .unwrap();
+        fs::write(
+            tempdir.path().join(".hidden/secret.md"),
+            "# Secret\n\nHidden\n",
+        )
+        .unwrap();
         fs::write(
             tempdir.path().join("node_modules/pkg/readme.md"),
             "# Dependency\n\nIgnored\n",
         )
         .unwrap();
-        fs::write(tempdir.path().join("dist/docs/output.md"), "# Output\n\nIgnored\n").unwrap();
+        fs::write(
+            tempdir.path().join("dist/docs/output.md"),
+            "# Output\n\nIgnored\n",
+        )
+        .unwrap();
 
         let documents = read_documents(tempdir.path()).unwrap();
         assert_eq!(documents.len(), 1);
@@ -719,7 +737,11 @@ Body
         fs::create_dir_all(tempdir.path().join("docs")).unwrap();
         fs::create_dir_all(tempdir.path().join("build")).unwrap();
         fs::write(tempdir.path().join("docs/guide.md"), "# Guide\n\nBody\n").unwrap();
-        fs::write(tempdir.path().join("build/generated.md"), "# Generated\n\nBody\n").unwrap();
+        fs::write(
+            tempdir.path().join("build/generated.md"),
+            "# Generated\n\nBody\n",
+        )
+        .unwrap();
         fs::write(tempdir.path().join(".hidden.md"), "# Hidden\n\nBody\n").unwrap();
 
         let relative_paths = collect_document_relative_paths(tempdir.path()).unwrap();
