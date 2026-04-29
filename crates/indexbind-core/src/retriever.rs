@@ -82,7 +82,7 @@ impl Default for RerankerOptions {
     fn default() -> Self {
         Self {
             kind: RerankerKind::CrossEncoderOnnx,
-            candidate_pool_size: 50,
+            candidate_pool_size: 20,
         }
     }
 }

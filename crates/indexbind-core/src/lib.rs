@@ -38,6 +38,8 @@ pub use retriever::{
     ArtifactInfo, RetrievalMode, RerankerKind, RerankerOptions, Retriever,
     RetrieverOpenOptions, ScoreAdjustmentOptions, SearchOptions, ModeProfile,
 };
+#[cfg(not(target_arch = "wasm32"))]
+pub use cross_encoder::CrossEncoder;
 pub use types::{
     BestMatch, ChunkHit, DocumentHit, MetadataMap, NormalizedDocument, SourceRoot, StoredChunk,
     StoredDocument,

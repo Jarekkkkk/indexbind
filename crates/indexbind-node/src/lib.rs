@@ -256,15 +256,16 @@ impl NativeIndex {
                 .as_ref()
                 .and_then(|value| value.min_score)
                 .map(|value| value as f32),
-            reranker: options
+             reranker: options
                 .as_ref()
                 .and_then(|value| value.reranker.as_ref())
                 .map(|value| {
                     Ok(indexbind_core::RerankerOptions {
                         kind: match value.kind.as_deref() {
-                            Some("embedding-v1") | None => {
-                                indexbind_core::RerankerKind::EmbeddingV1
+                            Some("cross-encoder-onnx") | None => {
+                                indexbind_core::RerankerKind::CrossEncoderOnnx
                             }
+                            Some("embedding-v1") => indexbind_core::RerankerKind::EmbeddingV1,
                             Some("heuristic-v1") => indexbind_core::RerankerKind::HeuristicV1,
                             Some(other) => {
                                 return Err(Error::from_reason(format!(
@@ -272,20 +273,10 @@ impl NativeIndex {
                                 )))
                             }
                         },
-                        candidate_pool_size: value.candidate_pool_size.unwrap_or(50) as usize,
+                        candidate_pool_size: value.candidate_pool_size.unwrap_or(20) as usize,
                     })
                 })
                 .transpose()?,
-            relative_path_prefix: options
-                .as_ref()
-                .and_then(|value| value.relative_path_prefix.clone()),
-            metadata: options
-                .as_ref()
-                .and_then(|value| value.metadata.clone())
-                .unwrap_or_default()
-                .into_iter()
-                .map(|(key, value)| (key, serde_json::Value::String(value)))
-                .collect(),
             score_adjustment: options
                 .as_ref()
                 .and_then(|value| value.score_adjustment.as_ref())
@@ -330,9 +321,10 @@ impl NativeIndex {
                 .map(|value| {
                     Ok(indexbind_core::RerankerOptions {
                         kind: match value.kind.as_deref() {
-                            Some("embedding-v1") | None => {
-                                indexbind_core::RerankerKind::EmbeddingV1
+                            Some("cross-encoder-onnx") | None => {
+                                indexbind_core::RerankerKind::CrossEncoderOnnx
                             }
+                            Some("embedding-v1") => indexbind_core::RerankerKind::EmbeddingV1,
                             Some("heuristic-v1") => indexbind_core::RerankerKind::HeuristicV1,
                             Some(other) => {
                                 return Err(Error::from_reason(format!(
@@ -340,7 +332,7 @@ impl NativeIndex {
                                 )))
                             }
                         },
-                        candidate_pool_size: value.candidate_pool_size.unwrap_or(50) as usize,
+                        candidate_pool_size: value.candidate_pool_size.unwrap_or(20) as usize,
                     })
                 })
                 .transpose()?,
