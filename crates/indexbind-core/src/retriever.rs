@@ -2,6 +2,7 @@ use crate::embedding::{
     bytes_to_vector, cosine_similarity, format_document_for_reranking, format_query_for_embedding,
     Embedder, EmbeddingBackend,
 };
+use crate::cross_encoder::CrossEncoder;
 use crate::lexical::{normalize_for_heuristic, tokenize};
 use crate::types::{BestMatch, ChunkHit, DocumentHit, MetadataMap, SourceRoot, StoredChunk, StoredDocument};
 use crate::{IndexbindError, Result};
@@ -80,7 +81,7 @@ pub struct RerankerOptions {
 impl Default for RerankerOptions {
     fn default() -> Self {
         Self {
-            kind: RerankerKind::EmbeddingV1,
+            kind: RerankerKind::CrossEncoderOnnx,
             candidate_pool_size: 50,
         }
     }
@@ -90,12 +91,13 @@ impl Default for RerankerOptions {
 #[serde(rename_all = "kebab-case")]
 pub enum RerankerKind {
     #[default]
+    CrossEncoderOnnx,
     EmbeddingV1,
     HeuristicV1,
 }
 
 fn default_reranker_kind() -> RerankerKind {
-    RerankerKind::EmbeddingV1
+    RerankerKind::CrossEncoderOnnx
 }
 
 impl Default for SearchOptions {
@@ -126,6 +128,7 @@ pub struct Retriever {
     chunks: Vec<IndexedChunk>,
     chunks_by_id: HashMap<i64, StoredChunk>,
     embedder: Option<Embedder>,
+    cross_encoder: CrossEncoder,
     mode_profile: ModeProfile,
 }
 
@@ -165,6 +168,7 @@ impl Retriever {
             chunks,
             chunks_by_id,
             embedder,
+            cross_encoder: CrossEncoder::new(),
             mode_profile: options.mode_profile,
         })
     }
@@ -435,6 +439,11 @@ impl Retriever {
         };
 
         match config.kind {
+            RerankerKind::CrossEncoderOnnx => {
+                self.cross_encoder.ensure_loaded()?;
+                rerank_documents_with_cross_encoder(
+                    &self.cross_encoder, query, hits, config, top_k)
+            }
             RerankerKind::EmbeddingV1 => {
                 let embedder = self.embedder_ref()?;
                 rerank_documents_with_embeddings(embedder, query, hits, config, top_k)
@@ -457,6 +466,11 @@ impl Retriever {
         };
 
         match config.kind {
+            RerankerKind::CrossEncoderOnnx => {
+                self.cross_encoder.ensure_loaded()?;
+                rerank_chunks_with_cross_encoder(
+                    &self.cross_encoder, query, hits, config, top_k)
+            }
             RerankerKind::EmbeddingV1 => {
                 let embedder = self.embedder_ref()?;
                 rerank_chunks_with_embeddings(embedder, query, hits, config, top_k)
@@ -884,6 +898,68 @@ fn rerank_chunks_with_embeddings(
             hit
         })
         .collect::<Vec<_>>();
+
+    reranked.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
+    reranked.truncate(top_k);
+    Ok(reranked)
+}
+
+fn rerank_documents_with_cross_encoder(
+    cross_encoder: &CrossEncoder,
+    query: &str,
+    hits: &[DocumentHit],
+    config: &RerankerOptions,
+    top_k: usize,
+) -> Result<Vec<DocumentHit>> {
+    let candidate_limit = config.candidate_pool_size.max(top_k);
+    let candidates: Vec<&DocumentHit> = hits.iter().take(candidate_limit).collect();
+
+    let passages: Vec<String> = candidates.iter().map(|hit| {
+        let title = hit.title.as_deref().unwrap_or("Untitled");
+        let heading = hit.best_match.heading_path.join(" > ");
+        let excerpt = &hit.best_match.excerpt;
+        format!("Title: {title}\nHeadings: {heading}\nContent: {excerpt}")
+    }).collect();
+
+    let ce_scores = cross_encoder.rerank(query, &passages, 32)?;
+
+    let mut reranked: Vec<DocumentHit> = candidates.into_iter().cloned().enumerate()
+        .map(|(i, mut hit)| {
+            hit.score = hit.score * 0.2 + ce_scores[i] * 0.8;
+            hit
+        })
+        .collect();
+
+    reranked.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
+    reranked.truncate(top_k);
+    Ok(reranked)
+}
+
+fn rerank_chunks_with_cross_encoder(
+    cross_encoder: &CrossEncoder,
+    query: &str,
+    hits: &[ChunkHit],
+    config: &RerankerOptions,
+    top_k: usize,
+) -> Result<Vec<ChunkHit>> {
+    let candidate_limit = config.candidate_pool_size.max(top_k);
+    let candidates: Vec<&ChunkHit> = hits.iter().take(candidate_limit).collect();
+
+    let passages: Vec<String> = candidates.iter().map(|hit| {
+        let title = hit.title.as_deref().unwrap_or("Untitled");
+        let heading = hit.heading_path.join(" > ");
+        let excerpt = &hit.excerpt;
+        format!("Title: {title}\nHeadings: {heading}\nContent: {excerpt}")
+    }).collect();
+
+    let ce_scores = cross_encoder.rerank(query, &passages, 32)?;
+
+    let mut reranked: Vec<ChunkHit> = candidates.into_iter().cloned().enumerate()
+        .map(|(i, mut hit)| {
+            hit.score = hit.score * 0.2 + ce_scores[i] * 0.8;
+            hit
+        })
+        .collect();
 
     reranked.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
     reranked.truncate(top_k);
