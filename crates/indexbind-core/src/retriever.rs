@@ -1773,4 +1773,132 @@ mod tests {
             .to_string()
             .contains("this index was opened with modeProfile: \"lexical\""));
     }
+
+    #[test]
+    fn cross_encoder_reranker_improves_document_relevance() {
+        if std::env::var("ORT_DYLIB_PATH").is_err() {
+            eprintln!("skipping: ORT_DYLIB_PATH not set");
+            return;
+        }
+
+        let dir = tempdir().unwrap();
+        let artifact = dir.path().join("index.sqlite");
+
+        build_artifact(
+            &artifact,
+            &[
+                NormalizedDocument {
+                    doc_id: Some("doc-good".to_string()),
+                    source_path: None,
+                    relative_path: "good.md".to_string(),
+                    canonical_url: None,
+                    title: Some("Rust Concurrency".to_string()),
+                    summary: None,
+                    content: "Arc and Mutex for shared state across threads.".to_string(),
+                    metadata: BTreeMap::new(),
+                },
+                NormalizedDocument {
+                    doc_id: Some("doc-weak".to_string()),
+                    source_path: None,
+                    relative_path: "weak.md".to_string(),
+                    canonical_url: None,
+                    title: Some("Random Notes".to_string()),
+                    summary: None,
+                    content: "Weather and random thoughts about life.".to_string(),
+                    metadata: BTreeMap::new(),
+                },
+            ],
+            &BuildArtifactOptions {
+                source_root: SourceRoot {
+                    id: "root".to_string(),
+                    original_path: ".".to_string(),
+                },
+                embedding_backend: EmbeddingBackend::Hashing { dimensions: 128 },
+                chunking: Default::default(),
+            },
+            None,
+        )
+        .unwrap();
+
+        let mut retriever = Retriever::open(&artifact).unwrap();
+        let hits = retriever
+            .search(
+                "Rust concurrency Arc Mutex threads",
+                SearchOptions {
+                    reranker: Some(RerankerOptions {
+                        kind: RerankerKind::CrossEncoderOnnx,
+                        candidate_pool_size: 10,
+                    }),
+                    ..SearchOptions::default()
+                },
+            )
+            .unwrap();
+
+        assert!(!hits.is_empty());
+        assert_eq!(hits[0].doc_id, "doc-good");
+    }
+
+    #[test]
+    fn cross_encoder_reranker_improves_chunk_relevance() {
+        if std::env::var("ORT_DYLIB_PATH").is_err() {
+            eprintln!("skipping: ORT_DYLIB_PATH not set");
+            return;
+        }
+
+        let dir = tempdir().unwrap();
+        let artifact = dir.path().join("index.sqlite");
+
+        build_artifact(
+            &artifact,
+            &[
+                NormalizedDocument {
+                    doc_id: Some("doc-good".to_string()),
+                    source_path: None,
+                    relative_path: "good.md".to_string(),
+                    canonical_url: None,
+                    title: Some("Rust Concurrency".to_string()),
+                    summary: None,
+                    content: "Arc and Mutex for shared state across threads.".to_string(),
+                    metadata: BTreeMap::new(),
+                },
+                NormalizedDocument {
+                    doc_id: Some("doc-weak".to_string()),
+                    source_path: None,
+                    relative_path: "weak.md".to_string(),
+                    canonical_url: None,
+                    title: Some("Random Notes".to_string()),
+                    summary: None,
+                    content: "Weather and random thoughts about life.".to_string(),
+                    metadata: BTreeMap::new(),
+                },
+            ],
+            &BuildArtifactOptions {
+                source_root: SourceRoot {
+                    id: "root".to_string(),
+                    original_path: ".".to_string(),
+                },
+                embedding_backend: EmbeddingBackend::Hashing { dimensions: 128 },
+                chunking: Default::default(),
+            },
+            None,
+        )
+        .unwrap();
+
+        let mut retriever = Retriever::open(&artifact).unwrap();
+        let hits = retriever
+            .search_chunks(
+                "Rust concurrency Arc Mutex threads",
+                SearchOptions {
+                    reranker: Some(RerankerOptions {
+                        kind: RerankerKind::CrossEncoderOnnx,
+                        candidate_pool_size: 10,
+                    }),
+                    ..SearchOptions::default()
+                },
+            )
+            .unwrap();
+
+        assert!(!hits.is_empty());
+        assert_eq!(hits[0].doc_id, "doc-good");
+    }
 }
