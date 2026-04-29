@@ -33,7 +33,7 @@ impl CrossEncoder {
         }
         let api = hf_hub::api::sync::Api::new()
             .map_err(|e| IndexbindError::Internal(e.to_string()))?;
-        let model_id = "BAAI/bge-reranker-v2-m3".to_string();
+        let model_id = "onnx-community/bge-reranker-v2-m3-ONNX".to_string();
         let api_model = api.model(model_id);
         let model_path = api_model
             .get("onnx/model_quantized.onnx")
