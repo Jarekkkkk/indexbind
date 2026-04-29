@@ -37,6 +37,6 @@ pub use retriever::{
     RetrieverOpenOptions, ScoreAdjustmentOptions, SearchOptions, ModeProfile,
 };
 pub use types::{
-    BestMatch, DocumentHit, MetadataMap, NormalizedDocument, SourceRoot, StoredChunk,
+    BestMatch, ChunkHit, DocumentHit, MetadataMap, NormalizedDocument, SourceRoot, StoredChunk,
     StoredDocument,
 };

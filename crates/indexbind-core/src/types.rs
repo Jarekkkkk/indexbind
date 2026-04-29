@@ -63,6 +63,17 @@ pub struct BestMatch {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChunkHit {
+    pub chunk_id: i64,
+    pub doc_id: String,
+    pub relative_path: String,
+    pub title: Option<String>,
+    pub heading_path: Vec<String>,
+    pub excerpt: String,
+    pub score: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentHit {
     pub doc_id: String,
     pub relative_path: String,

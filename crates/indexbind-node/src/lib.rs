@@ -8,7 +8,7 @@ use indexbind_core::{
     build_artifact as build_artifact_native, build_canonical_artifact,
     export_artifact_from_build_cache,
     export_canonical_from_build_cache, update_build_cache, BuildArtifactOptions, BuildCacheUpdate,
-    BuildStats, CanonicalBuildStats, ChunkingOptions, DocumentHit, EmbeddingBackend,
+    BuildStats, CanonicalBuildStats, ChunkHit, ChunkingOptions, DocumentHit, EmbeddingBackend,
     IncrementalBuildStats, ModeProfile, NormalizedDocument, Retriever, RetrieverOpenOptions,
     SearchOptions, SourceRoot,
 };
@@ -68,6 +68,17 @@ pub struct NodeDocumentHit {
     pub metadata: String,
     pub score: f64,
     pub best_match: NodeBestMatch,
+}
+
+#[napi(object)]
+pub struct NodeChunkHit {
+    pub chunk_id: i64,
+    pub doc_id: String,
+    pub relative_path: String,
+    pub title: Option<String>,
+    pub heading_path: Vec<String>,
+    pub excerpt: String,
+    pub score: f64,
 }
 
 #[napi(object)]
@@ -190,6 +201,7 @@ impl NativeIndex {
                     }
                 },
             },
+            None,
         )
         .map_err(map_error)?;
         Ok(Self {
@@ -285,6 +297,68 @@ impl NativeIndex {
         let hits = retriever.search(&query, options).map_err(map_error)?;
         Ok(hits.into_iter().map(map_hit).collect())
     }
+
+    #[napi]
+    pub fn search_chunks(
+        &self,
+        query: String,
+        options: Option<NodeSearchOptions>,
+    ) -> napi::Result<Vec<NodeChunkHit>> {
+        let mut retriever = self
+            .inner
+            .lock()
+            .map_err(|error| Error::from_reason(error.to_string()))?;
+        let options = SearchOptions {
+            top_k: options.as_ref().and_then(|value| value.top_k).unwrap_or(10) as usize,
+            mode: match options.as_ref().and_then(|value| value.mode.as_deref()) {
+                Some("hybrid") | None => indexbind_core::RetrievalMode::Hybrid,
+                Some("vector") => indexbind_core::RetrievalMode::Vector,
+                Some("lexical") => indexbind_core::RetrievalMode::Lexical,
+                Some(other) => {
+                    return Err(Error::from_reason(format!(
+                        "unsupported retrieval mode: {other}"
+                    )))
+                }
+            },
+            min_score: options
+                .as_ref()
+                .and_then(|value| value.min_score)
+                .map(|value| value as f32),
+            reranker: options
+                .as_ref()
+                .and_then(|value| value.reranker.as_ref())
+                .map(|value| {
+                    Ok(indexbind_core::RerankerOptions {
+                        kind: match value.kind.as_deref() {
+                            Some("embedding-v1") | None => {
+                                indexbind_core::RerankerKind::EmbeddingV1
+                            }
+                            Some("heuristic-v1") => indexbind_core::RerankerKind::HeuristicV1,
+                            Some(other) => {
+                                return Err(Error::from_reason(format!(
+                                    "unsupported reranker kind: {other}"
+                                )))
+                            }
+                        },
+                        candidate_pool_size: value.candidate_pool_size.unwrap_or(50) as usize,
+                    })
+                })
+                .transpose()?,
+            relative_path_prefix: options
+                .as_ref()
+                .and_then(|value| value.relative_path_prefix.clone()),
+            metadata: options
+                .as_ref()
+                .and_then(|value| value.metadata.clone())
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(key, value)| (key, serde_json::Value::String(value)))
+                .collect(),
+            ..SearchOptions::default()
+        };
+        let hits = retriever.search_chunks(&query, options).map_err(map_error)?;
+        Ok(hits.into_iter().map(map_chunk_hit).collect())
+    }
 }
 
 #[napi]
@@ -302,6 +376,7 @@ pub fn build_canonical_bundle(
         &PathBuf::from(output_dir),
         &normalized_documents,
         &build_options,
+        None,
     )
     .map_err(map_error)?;
     Ok(map_build_stats(stats))
@@ -318,9 +393,13 @@ pub fn build_artifact(
         .into_iter()
         .map(map_build_document)
         .collect::<napi::Result<Vec<_>>>()?;
-    let stats =
-        build_artifact_native(&PathBuf::from(output_path), &normalized_documents, &build_options)
-            .map_err(map_error)?;
+    let stats = build_artifact_native(
+        &PathBuf::from(output_path),
+        &normalized_documents,
+        &build_options,
+        None,
+    )
+    .map_err(map_error)?;
     Ok(map_plain_build_stats(stats))
 }
 
@@ -382,6 +461,7 @@ pub fn update_build_cache_from_documents(
             replace_all: replace_all.unwrap_or(false),
         },
         &build_options,
+        None,
     )
     .map_err(map_error)?;
     Ok(map_incremental_build_stats(stats))
@@ -533,6 +613,18 @@ fn map_hit(hit: DocumentHit) -> NodeDocumentHit {
             char_end: hit.best_match.char_end as u32,
             score: hit.best_match.score as f64,
         },
+    }
+}
+
+fn map_chunk_hit(hit: ChunkHit) -> NodeChunkHit {
+    NodeChunkHit {
+        chunk_id: hit.chunk_id,
+        doc_id: hit.doc_id,
+        relative_path: hit.relative_path,
+        title: hit.title,
+        heading_path: hit.heading_path,
+        excerpt: hit.excerpt,
+        score: hit.score as f64,
     }
 }
 

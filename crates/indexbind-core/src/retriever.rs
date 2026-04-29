@@ -3,7 +3,7 @@ use crate::embedding::{
     Embedder, EmbeddingBackend,
 };
 use crate::lexical::{normalize_for_heuristic, tokenize};
-use crate::types::{BestMatch, DocumentHit, MetadataMap, SourceRoot, StoredChunk, StoredDocument};
+use crate::types::{BestMatch, ChunkHit, DocumentHit, MetadataMap, SourceRoot, StoredChunk, StoredDocument};
 use crate::{IndexbindError, Result};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
@@ -225,6 +225,53 @@ impl Retriever {
             options.top_k,
         ))
     }
+
+    pub fn search_chunks(
+        &mut self,
+        query: &str,
+        options: SearchOptions,
+    ) -> Result<Vec<ChunkHit>> {
+        self.ensure_mode_supported(options.mode)?;
+        let allowed_doc_ids = self.allowed_doc_ids(&options);
+        if allowed_doc_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let rerank_candidate_limit = options
+            .reranker
+            .as_ref()
+            .map(|config| config.candidate_pool_size.max(options.top_k))
+            .unwrap_or(options.top_k);
+        let limit = (options.top_k * options.candidate_multiplier.max(1))
+            .max(rerank_candidate_limit)
+            .max(options.top_k);
+        let vector_chunks = match options.mode {
+            RetrievalMode::Hybrid | RetrievalMode::Vector => {
+                let formatted_query = format_query_for_embedding(query);
+                let query_embedding = self
+                    .embedder_ref()?
+                    .embed_texts(&[formatted_query])?
+                    .into_iter()
+                    .next()
+                    .unwrap_or_default();
+                self.score_chunks_by_vector(&query_embedding, limit, &allowed_doc_ids)
+            }
+            RetrievalMode::Lexical => Vec::new(),
+        };
+        let lexical_chunks = match options.mode {
+            RetrievalMode::Hybrid | RetrievalMode::Lexical => {
+                self.score_chunks_by_lexical(query, limit, &allowed_doc_ids)?
+            }
+            RetrievalMode::Vector => Vec::new(),
+        };
+        let fused = fuse_chunk_scores(&self.documents, &vector_chunks, &lexical_chunks, limit);
+        let reranked = self.rerank_chunks(
+            query,
+            &fused,
+            options.reranker.as_ref(),
+            rerank_candidate_limit,
+        )?;
+        Ok(finalize_chunk_hits(reranked, options.min_score, options.top_k))
+    }
 }
 
 fn finalize_hits(
@@ -258,6 +305,19 @@ fn finalize_hits(
     hits
 }
 
+fn finalize_chunk_hits(
+    mut hits: Vec<ChunkHit>,
+    min_score: Option<f32>,
+    top_k: usize,
+) -> Vec<ChunkHit> {
+    if let Some(min_score) = min_score.filter(|value| value.is_finite()) {
+        hits.retain(|hit| hit.score >= min_score);
+    }
+    hits.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
+    hits.truncate(top_k);
+    hits
+}
+
 impl Retriever {
     fn ensure_mode_supported(&self, mode: RetrievalMode) -> Result<()> {
         if self.mode_profile == ModeProfile::Lexical && mode != RetrievalMode::Lexical {
@@ -285,42 +345,47 @@ impl Retriever {
             .collect()
     }
 
+    fn score_chunks_by_vector(
+        &self,
+        query_embedding: &[f32],
+        limit: usize,
+        allowed_doc_ids: &HashSet<String>,
+    ) -> Vec<(f32, &StoredChunk)> {
+        let mut chunk_scores = self
+            .chunks
+            .iter()
+            .filter(|ic| allowed_doc_ids.contains(&ic.chunk.doc_id))
+            .map(|ic| (cosine_similarity(query_embedding, &ic.embedding), &ic.chunk))
+            .filter(|(score, _)| *score > 0.0)
+            .collect::<Vec<_>>();
+        chunk_scores.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(Ordering::Equal));
+        chunk_scores.truncate(limit);
+        chunk_scores
+    }
+
     fn rank_documents_by_vector(
         &self,
         query_embedding: &[f32],
         limit: usize,
         allowed_doc_ids: &HashSet<String>,
     ) -> Vec<RankedDocument> {
-        let mut chunk_scores = self
-            .chunks
-            .iter()
-            .filter(|indexed_chunk| allowed_doc_ids.contains(&indexed_chunk.chunk.doc_id))
-            .map(|indexed_chunk| {
-                (
-                    cosine_similarity(query_embedding, &indexed_chunk.embedding),
-                    &indexed_chunk.chunk,
-                )
-            })
-            .filter(|(score, _)| *score > 0.0)
-            .collect::<Vec<_>>();
-        chunk_scores.sort_by(|left, right| right.0.partial_cmp(&left.0).unwrap_or(Ordering::Equal));
-
-        aggregate_ranked_documents(chunk_scores.into_iter().take(limit * 2), limit)
+        let chunk_scores = self.score_chunks_by_vector(query_embedding, limit * 2, allowed_doc_ids);
+        aggregate_ranked_documents(chunk_scores.into_iter(), limit)
     }
 
-    fn rank_documents_by_lexical(
+    fn score_chunks_by_lexical(
         &self,
         query: &str,
         limit: usize,
         allowed_doc_ids: &HashSet<String>,
-    ) -> Result<Vec<RankedDocument>> {
+    ) -> Result<Vec<(f32, &StoredChunk)>> {
         let Some(fts_query) = build_fts_query(query) else {
             return Ok(Vec::new());
         };
 
         let mut statement = self.connection.prepare(
             "
-            SELECT chunk_id, doc_id, bm25(fts_chunks) AS rank
+            SELECT chunk_id, bm25(fts_chunks) AS rank
             FROM fts_chunks
             WHERE fts_chunks MATCH ?1
             ORDER BY rank
@@ -329,14 +394,13 @@ impl Retriever {
         )?;
         let rows = statement.query_map(params![fts_query, limit as i64], |row| {
             let chunk_id: i64 = row.get(0)?;
-            let doc_id: String = row.get(1)?;
-            let bm25: f64 = row.get(2)?;
-            Ok((chunk_id, doc_id, bm25))
+            let bm25: f64 = row.get(1)?;
+            Ok((chunk_id, bm25))
         })?;
 
         let mut chunk_scores = Vec::new();
         for row in rows {
-            let (chunk_id, _doc_id, bm25) = row?;
+            let (chunk_id, bm25) = row?;
             if let Some(chunk) = self.chunks_by_id.get(&chunk_id) {
                 if !allowed_doc_ids.contains(&chunk.doc_id) {
                     continue;
@@ -346,6 +410,16 @@ impl Retriever {
             }
         }
 
+        Ok(chunk_scores)
+    }
+
+    fn rank_documents_by_lexical(
+        &self,
+        query: &str,
+        limit: usize,
+        allowed_doc_ids: &HashSet<String>,
+    ) -> Result<Vec<RankedDocument>> {
+        let chunk_scores = self.score_chunks_by_lexical(query, limit, allowed_doc_ids)?;
         Ok(aggregate_ranked_documents(chunk_scores.into_iter(), limit))
     }
 
@@ -367,6 +441,28 @@ impl Retriever {
             }
             RerankerKind::HeuristicV1 => {
                 Ok(rerank_documents_with_heuristic(query, hits, config, top_k))
+            }
+        }
+    }
+
+    fn rerank_chunks(
+        &mut self,
+        query: &str,
+        hits: &[ChunkHit],
+        config: Option<&RerankerOptions>,
+        top_k: usize,
+    ) -> Result<Vec<ChunkHit>> {
+        let Some(config) = config else {
+            return Ok(hits.iter().take(top_k).cloned().collect());
+        };
+
+        match config.kind {
+            RerankerKind::EmbeddingV1 => {
+                let embedder = self.embedder_ref()?;
+                rerank_chunks_with_embeddings(embedder, query, hits, config, top_k)
+            }
+            RerankerKind::HeuristicV1 => {
+                Ok(rerank_chunks_with_heuristic(query, hits, config, top_k))
             }
         }
     }
@@ -449,6 +545,51 @@ where
     });
     documents.truncate(limit);
     documents
+}
+
+fn fuse_chunk_scores(
+    documents: &HashMap<String, StoredDocument>,
+    vector_scores: &[(f32, &StoredChunk)],
+    lexical_scores: &[(f32, &StoredChunk)],
+    top_k: usize,
+) -> Vec<ChunkHit> {
+    const RRF_K: f32 = 60.0;
+
+    let mut fused: HashMap<i64, f32> = HashMap::new();
+    let mut chunk_map: HashMap<i64, &StoredChunk> = HashMap::new();
+
+    for (rank, (_score, chunk)) in vector_scores.iter().enumerate() {
+        let rrf = 1.0 / (RRF_K + rank as f32 + 1.0);
+        *fused.entry(chunk.chunk_id).or_insert(0.0) += rrf;
+        chunk_map.entry(chunk.chunk_id).or_insert(chunk);
+    }
+
+    for (rank, (_score, chunk)) in lexical_scores.iter().enumerate() {
+        let rrf = 1.0 / (RRF_K + rank as f32 + 1.0);
+        *fused.entry(chunk.chunk_id).or_insert(0.0) += rrf;
+        chunk_map.entry(chunk.chunk_id).or_insert(chunk);
+    }
+
+    let mut hits: Vec<ChunkHit> = fused
+        .into_iter()
+        .filter_map(|(chunk_id, score)| {
+            let chunk = chunk_map.get(&chunk_id)?;
+            let doc = documents.get(&chunk.doc_id)?;
+            Some(ChunkHit {
+                chunk_id,
+                doc_id: chunk.doc_id.clone(),
+                relative_path: doc.relative_path.clone(),
+                title: doc.title.clone(),
+                heading_path: chunk.heading_path.clone(),
+                excerpt: chunk.excerpt.clone(),
+                score,
+            })
+        })
+        .collect();
+
+    hits.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
+    hits.truncate(top_k);
+    hits
 }
 
 fn fuse_documents(
@@ -612,17 +753,20 @@ impl RetrievalMode {
     }
 }
 
-fn score_document_heuristic(
-    hit: &DocumentHit,
+fn score_heuristic(
+    title: Option<&str>,
+    heading_path: &[String],
+    excerpt: &str,
+    relative_path: &str,
     query_tokens: &[String],
     normalized_query: &str,
 ) -> f32 {
-    let title = hit.title.as_deref().unwrap_or_default();
-    let heading = hit.best_match.heading_path.join(" ");
-    let title_norm = normalize_for_heuristic(title);
-    let path_norm = normalize_for_heuristic(&hit.relative_path);
+    let title_str = title.unwrap_or_default();
+    let heading = heading_path.join(" ");
+    let title_norm = normalize_for_heuristic(title_str);
+    let path_norm = normalize_for_heuristic(relative_path);
     let heading_norm = normalize_for_heuristic(&heading);
-    let excerpt_norm = normalize_for_heuristic(&hit.best_match.excerpt);
+    let excerpt_norm = normalize_for_heuristic(excerpt);
 
     let title_coverage = score_token_coverage(query_tokens, &title_norm);
     let heading_coverage = score_token_coverage(query_tokens, &heading_norm);
@@ -643,6 +787,107 @@ fn score_document_heuristic(
         + excerpt_coverage * 0.25
         + path_coverage * 0.10
         + phrase_bonus
+}
+
+fn score_document_heuristic(
+    hit: &DocumentHit,
+    query_tokens: &[String],
+    normalized_query: &str,
+) -> f32 {
+    score_heuristic(
+        hit.title.as_deref(),
+        &hit.best_match.heading_path,
+        &hit.best_match.excerpt,
+        &hit.relative_path,
+        query_tokens,
+        normalized_query,
+    )
+}
+
+fn rerank_chunks_with_heuristic(
+    query: &str,
+    hits: &[ChunkHit],
+    config: &RerankerOptions,
+    top_k: usize,
+) -> Vec<ChunkHit> {
+    let candidate_limit = config.candidate_pool_size.max(top_k);
+    let query_tokens = tokenize(query);
+    let normalized_query = normalize_for_heuristic(query);
+    let mut reranked = hits
+        .iter()
+        .take(candidate_limit)
+        .cloned()
+        .map(|mut hit| {
+            let rerank_score = score_heuristic(
+                hit.title.as_deref(),
+                &hit.heading_path,
+                &hit.excerpt,
+                &hit.relative_path,
+                &query_tokens,
+                &normalized_query,
+            );
+            hit.score = hit.score * 0.35 + rerank_score * 0.65;
+            hit
+        })
+        .collect::<Vec<_>>();
+
+    reranked.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
+    reranked.truncate(top_k);
+    reranked
+}
+
+fn rerank_chunks_with_embeddings(
+    embedder: &Embedder,
+    query: &str,
+    hits: &[ChunkHit],
+    config: &RerankerOptions,
+    top_k: usize,
+) -> Result<Vec<ChunkHit>> {
+    let candidate_limit = config.candidate_pool_size.max(top_k);
+    let query_tokens = tokenize(query);
+    let normalized_query = normalize_for_heuristic(query);
+    let mut inputs = Vec::with_capacity(candidate_limit + 1);
+    inputs.push(format_query_for_embedding(query));
+    inputs.extend(hits.iter().take(candidate_limit).map(|hit| {
+        format_document_for_reranking(
+            &hit.relative_path,
+            hit.title.as_deref(),
+            &hit.heading_path,
+            &hit.excerpt,
+            &BTreeMap::new(),
+        )
+    }));
+
+    let mut embeddings = embedder.embed_texts(&inputs)?;
+    if embeddings.len() <= 1 {
+        return Ok(hits.iter().take(top_k).cloned().collect());
+    }
+
+    let query_embedding = embeddings.remove(0);
+    let mut reranked = hits
+        .iter()
+        .take(candidate_limit)
+        .cloned()
+        .zip(embeddings.into_iter())
+        .map(|(mut hit, doc_embedding)| {
+            let embedding_score = cosine_similarity(&query_embedding, &doc_embedding).max(0.0);
+            let heuristic_score = score_heuristic(
+                hit.title.as_deref(),
+                &hit.heading_path,
+                &hit.excerpt,
+                &hit.relative_path,
+                &query_tokens,
+                &normalized_query,
+            );
+            let rerank_score = embedding_score * 0.8 + heuristic_score * 0.2;
+            hit.score = hit.score * 0.2 + rerank_score * 0.8;
+            hit
+        })
+        .collect::<Vec<_>>();
+
+    reranked.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
+    reranked.truncate(top_k);
+    Ok(reranked)
 }
 
 fn score_token_coverage(query_tokens: &[String], haystack: &str) -> f32 {
@@ -1131,6 +1376,7 @@ mod tests {
                 embedding_backend: EmbeddingBackend::Hashing { dimensions: 128 },
                 chunking: Default::default(),
             },
+            None,
         )
         .unwrap();
 
