@@ -15,6 +15,8 @@ pub enum IndexbindError {
     InvalidSearchConfig(String),
     #[error("artifact metadata missing: {0}")]
     MissingMetadata(&'static str),
+    #[error("{0}")]
+    Internal(String),
 }
 
 pub type Result<T> = std::result::Result<T, IndexbindError>;

@@ -18,7 +18,8 @@ thiserror.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 hf-hub.workspace = true
-ort = { version = "2.0.0-rc.12", features = ["load-dynamic"] }
+ndarray = "0.17"
+ort = { version = "2.0.0-rc.12", features = ["load-dynamic", "ndarray"] }
 rusqlite.workspace = true
 model2vec-rs = { git = "https://github.com/MinishLab/model2vec-rs.git", rev = "53c5a618f5d04e889359a3a0c04676e9c3138769", default-features = false, features = ["onig", "hf-hub"] }
 pulldown-cmark = "0.10"

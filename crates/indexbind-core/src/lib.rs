@@ -5,6 +5,8 @@ mod build;
 mod build_cache;
 mod canonical;
 mod chunking;
+#[cfg(not(target_arch = "wasm32"))]
+mod cross_encoder;
 mod embedding;
 mod error;
 mod lexical;

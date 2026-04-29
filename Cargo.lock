@@ -1058,6 +1058,7 @@ dependencies = [
  "getrandom 0.2.17",
  "hf-hub",
  "model2vec-rs",
+ "ndarray 0.17.2",
  "ort",
  "pulldown-cmark",
  "rusqlite",
