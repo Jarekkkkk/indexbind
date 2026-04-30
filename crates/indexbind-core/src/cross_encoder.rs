@@ -124,7 +124,12 @@ impl CrossEncoder {
 
             let scores: Vec<f32> = if shape.last() == Some(&1) || shape.len() == 1 {
                 // Single score per sample (bge-reranker-v2-m3 regression output)
-                logits_data.iter().take(batch_actual).copied().collect()
+                // Apply sigmoid to map raw logits to [0, 1] probability-like scores
+                logits_data
+                    .iter()
+                    .take(batch_actual)
+                    .map(|&x| 1.0 / (1.0 + (-x).exp()))
+                    .collect()
             } else if shape.last() == Some(&2) {
                 // Two-class logits
                 (0..batch_actual)
