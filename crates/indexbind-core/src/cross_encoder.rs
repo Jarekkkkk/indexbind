@@ -4,6 +4,7 @@ use ort::session::builder::GraphOptimizationLevel;
 use ort::session::Session;
 use ort::value::Tensor;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 use tokenizers::Tokenizer;
 
 #[derive(Clone)]
@@ -32,16 +33,32 @@ impl CrossEncoder {
         if guard.is_some() {
             return Ok(());
         }
+        let t0 = Instant::now();
+
         let api = hf_hub::api::sync::Api::new()
             .map_err(|e| IndexbindError::Internal(e.to_string()))?;
+        let t1 = Instant::now();
+        eprintln!("[CrossEncoder] Api::new(): {:?}", t1.duration_since(t0));
+
         let model_id = "onnx-community/bge-reranker-v2-m3-ONNX".to_string();
         let api_model = api.model(model_id);
         let model_path = api_model
             .get("onnx/model_quantized.onnx")
             .map_err(|e| IndexbindError::Internal(format!("failed to download model: {e}")))?;
+        let t2 = Instant::now();
+        eprintln!(
+            "[CrossEncoder] hf_hub get model_quantized.onnx: {:?}",
+            t2.duration_since(t1)
+        );
+
         let tokenizer_path = api_model
             .get("tokenizer.json")
             .map_err(|e| IndexbindError::Internal(format!("failed to download tokenizer: {e}")))?;
+        let t3 = Instant::now();
+        eprintln!(
+            "[CrossEncoder] hf_hub get tokenizer.json: {:?}",
+            t3.duration_since(t2)
+        );
 
         let session = Session::builder()
             .map_err(|e| IndexbindError::Internal(format!("ort builder: {e}")))?
@@ -51,14 +68,26 @@ impl CrossEncoder {
             .map_err(|e| IndexbindError::Internal(format!("ort threads: {e}")))?
             .commit_from_file(&model_path)
             .map_err(|e| IndexbindError::Internal(format!("ort commit: {e}")))?;
+        let t4 = Instant::now();
+        eprintln!(
+            "[CrossEncoder] Session::commit_from_file(): {:?}",
+            t4.duration_since(t3)
+        );
+
         let tokenizer = Tokenizer::from_file(&tokenizer_path)
             .map_err(|e| IndexbindError::Internal(format!("tokenizer load: {e}")))?;
+        let t5 = Instant::now();
+        eprintln!(
+            "[CrossEncoder] Tokenizer::from_file(): {:?}",
+            t5.duration_since(t4)
+        );
 
         *guard = Some(CrossEncoderInner {
             session,
             tokenizer,
             max_length: 512,
         });
+        eprintln!("[CrossEncoder] total ensure_loaded: {:?}", t5.duration_since(t0));
         Ok(())
     }
 
