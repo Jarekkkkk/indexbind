@@ -177,6 +177,10 @@ impl Retriever {
         &self.info
     }
 
+    pub fn warm_cross_encoder(&mut self) -> Result<()> {
+        self.cross_encoder.ensure_loaded()
+    }
+
     pub fn search(&mut self, query: &str, options: SearchOptions) -> Result<Vec<DocumentHit>> {
         self.ensure_mode_supported(options.mode)?;
         let allowed_doc_ids = self.allowed_doc_ids(&options);
