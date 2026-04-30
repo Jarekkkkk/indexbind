@@ -1,5 +1,6 @@
 use crate::IndexbindError;
 use ndarray::Array2;
+use ort::session::builder::GraphOptimizationLevel;
 use ort::session::Session;
 use ort::value::Tensor;
 use std::sync::{Arc, Mutex};
@@ -44,6 +45,10 @@ impl CrossEncoder {
 
         let session = Session::builder()
             .map_err(|e| IndexbindError::Internal(format!("ort builder: {e}")))?
+            .with_optimization_level(GraphOptimizationLevel::Level1)
+            .map_err(|e| IndexbindError::Internal(format!("ort opt level: {e}")))?
+            .with_intra_threads(4)
+            .map_err(|e| IndexbindError::Internal(format!("ort threads: {e}")))?
             .commit_from_file(&model_path)
             .map_err(|e| IndexbindError::Internal(format!("ort commit: {e}")))?;
         let tokenizer = Tokenizer::from_file(&tokenizer_path)
@@ -114,7 +119,7 @@ impl CrossEncoder {
 
             for i in 0..batch_actual {
                 let pos = logits_data[i * 2 + 1];
-                let neg = logits_data[i * 2 + 0];
+                let neg = logits_data[i * 2];
                 let prob = 1.0 / (1.0 + (-pos + neg).exp());
                 all_scores.push(prob);
             }
