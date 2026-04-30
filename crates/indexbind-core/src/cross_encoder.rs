@@ -142,16 +142,30 @@ impl CrossEncoder {
                 ])
                 .map_err(|e| IndexbindError::Internal(format!("ort run: {e}")))?;
 
-            let (_shape, logits_data) = outputs["logits"]
+            let (shape, logits_data) = outputs["logits"]
                 .try_extract_tensor::<f32>()
                 .map_err(|e| IndexbindError::Internal(format!("ort extract: {e}")))?;
 
-            for i in 0..batch_actual {
-                let pos = logits_data[i * 2 + 1];
-                let neg = logits_data[i * 2];
-                let prob = 1.0 / (1.0 + (-pos + neg).exp());
-                all_scores.push(prob);
-            }
+            let scores: Vec<f32> = if shape.last() == Some(&1) || shape.len() == 1 {
+                // Single score per sample (bge-reranker-v2-m3 regression output)
+                logits_data.iter().take(batch_actual).copied().collect()
+            } else if shape.last() == Some(&2) {
+                // Two-class logits
+                (0..batch_actual)
+                    .map(|i| {
+                        let pos = logits_data[i * 2 + 1];
+                        let neg = logits_data[i * 2];
+                        1.0 / (1.0 + (-pos + neg).exp())
+                    })
+                    .collect()
+            } else {
+                return Err(IndexbindError::Internal(format!(
+                    "unexpected logits shape {:?}",
+                    shape
+                )));
+            };
+
+            all_scores.extend(scores);
         }
         Ok(all_scores)
     }
