@@ -1,17 +1,20 @@
 use crate::lexical::estimate_token_count;
 use crate::types::StoredChunk;
-use pulldown_cmark::{Event, Parser, Tag};
+use pulldown_cmark::{Event, Parser, Tag, TagEnd};
 
 /// Strip markdown syntax from text, returning plain text only.
 pub fn strip_markdown(text: &str) -> String {
     let parser = Parser::new(text);
     let mut result = String::new();
+    let mut in_image = false;
 
     for event in parser {
         match event {
-            Event::Text(t) | Event::Code(t) => result.push_str(&t),
-            Event::SoftBreak | Event::HardBreak => result.push(' '),
-            _ => {} // Skip links, images, HTML tags, etc.
+            Event::Start(Tag::Image { .. }) => in_image = true,
+            Event::End(TagEnd::Image) => in_image = false,
+            Event::Text(t) | Event::Code(t) if !in_image => result.push_str(&t),
+            Event::SoftBreak | Event::HardBreak if !in_image => result.push(' '),
+            _ => {}
         }
     }
 
@@ -223,6 +226,13 @@ mod tests {
         assert_eq!(chunks.len(), 2);
         assert_eq!(chunks[0].heading_path, vec!["Intro"]);
         assert_eq!(chunks[1].heading_path, vec!["Intro", "Details"]);
+    }
+
+    #[test]
+    fn strip_markdown_skips_image_alt_text() {
+        let input = "Circle Payments ![Image](url.png) Network";
+        let plain = super::strip_markdown(input);
+        assert_eq!(plain, "Circle Payments Network");
     }
 
     #[test]
