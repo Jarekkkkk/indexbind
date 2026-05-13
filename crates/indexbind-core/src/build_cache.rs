@@ -16,7 +16,7 @@ use crate::{IndexbindError, Result};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -28,6 +28,7 @@ pub struct BuildCacheUpdate {
     pub documents: Vec<NormalizedDocument>,
     pub removed_relative_paths: Vec<String>,
     pub replace_all: bool,
+    pub precomputed_embeddings: HashMap<String, Vec<Vec<f32>>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -97,6 +98,7 @@ pub fn update_build_cache(
         documents,
         removed_relative_paths,
         replace_all,
+        precomputed_embeddings,
     } = update;
     let mut scanned_document_count = 0usize;
     let mut new_document_count = 0usize;
@@ -123,7 +125,7 @@ pub fn update_build_cache(
             None => new_document_count += 1,
         }
 
-        let materialized = materialize_document(&document, options, &embedder)?;
+        let materialized = materialize_document(&document, options, &embedder, &precomputed_embeddings)?;
         upsert_materialized_document(&transaction, &materialized, &options.source_root.id)?;
     }
 
@@ -584,6 +586,7 @@ fn materialize_document(
     document: &NormalizedDocument,
     options: &BuildArtifactOptions,
     embedder: &Embedder,
+    precomputed_embeddings: &HashMap<String, Vec<Vec<f32>>>,
 ) -> Result<MaterializedDocument> {
     let doc_id = document
         .doc_id
@@ -606,7 +609,20 @@ fn materialize_document(
             )
         })
         .collect::<Vec<_>>();
-    let embeddings = embedder.embed_texts(&embedding_inputs)?;
+    let embeddings = match precomputed_embeddings.get(&document.relative_path) {
+        Some(embeddings) => {
+            if embeddings.len() != embedding_inputs.len() {
+                return Err(IndexbindError::Embedding(anyhow::anyhow!(
+                    "precomputed_embeddings count {} must match chunk count {} for {}",
+                    embeddings.len(),
+                    embedding_inputs.len(),
+                    document.relative_path
+                )));
+            }
+            embeddings.clone()
+        }
+        None => embedder.embed_texts(&embedding_inputs)?,
+    };
 
     let materialized_chunks = chunks
         .into_iter()
@@ -878,6 +894,7 @@ mod tests {
                 ],
                 removed_relative_paths: Vec::new(),
                 replace_all: true,
+                ..Default::default()
             },
             &options,
             None,
@@ -895,6 +912,7 @@ mod tests {
                 ],
                 removed_relative_paths: Vec::new(),
                 replace_all: true,
+                ..Default::default()
             },
             &options,
             None,
@@ -923,6 +941,7 @@ mod tests {
                 ],
                 removed_relative_paths: Vec::new(),
                 replace_all: true,
+                ..Default::default()
             },
             &options,
             None,
@@ -935,6 +954,7 @@ mod tests {
                 documents: vec![document("docs/a.md", "Alpha 2")],
                 removed_relative_paths: vec!["docs/b.md".to_string()],
                 replace_all: false,
+                ..Default::default()
             },
             &options,
             None,
@@ -962,6 +982,7 @@ mod tests {
                 documents: vec![document("guides/rust.md", "Rust retrieval guide")],
                 removed_relative_paths: Vec::new(),
                 replace_all: true,
+                ..Default::default()
             },
             &options,
             None,
@@ -996,6 +1017,7 @@ mod tests {
                 documents: vec![document("docs/a.md", "Alpha")],
                 removed_relative_paths: Vec::new(),
                 replace_all: true,
+                ..Default::default()
             },
             &options,
             None,

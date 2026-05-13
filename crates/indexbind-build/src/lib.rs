@@ -81,6 +81,7 @@ pub fn update_cache_from_directory_with_mode(
                     documents,
                     removed_relative_paths: Vec::new(),
                     replace_all: true,
+                    ..Default::default()
                 },
                 &options,
                 None,
@@ -196,6 +197,7 @@ fn read_directory_update(root: &Path, mode: DirectoryUpdateMode) -> Result<Build
             documents: read_documents(root)?,
             removed_relative_paths: Vec::new(),
             replace_all: true,
+            ..Default::default()
         }),
         DirectoryUpdateMode::GitDiff { base_revision } => read_git_diff_update(root, base_revision),
     }
@@ -248,6 +250,7 @@ fn read_git_diff_update(root: &Path, base_revision: Option<String>) -> Result<Bu
         documents,
         removed_relative_paths: removed.into_iter().collect(),
         replace_all: false,
+        ..Default::default()
     })
 }
 

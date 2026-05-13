@@ -26,8 +26,8 @@ pub use canonical::{
     build_canonical_artifact, CanonicalArtifactManifest, CanonicalBuildStats, CanonicalChunkRecord,
     CanonicalDocumentRecord, CanonicalPosting, CanonicalPostings,
 };
-pub use chunking::ChunkingOptions;
-pub use embedding::{Embedder, EmbeddingBackend};
+pub use chunking::{chunk_document, ChunkingOptions};
+pub use embedding::{format_chunk_for_embedding, Embedder, EmbeddingBackend};
 pub use error::{IndexbindError, Result};
 pub use lexical::{
     estimate_token_count, normalize_for_heuristic, tokenize as lexical_tokenize,
