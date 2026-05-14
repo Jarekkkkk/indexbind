@@ -531,7 +531,10 @@ where
         .into_iter()
         .filter_map(|(doc_id, mut scores)| {
             scores.sort_by(|left, right| right.0.partial_cmp(&left.0).unwrap_or(Ordering::Equal));
-            let best = scores.first()?;
+            let best = scores
+                .iter()
+                .find(|(_, chunk)| chunk.excerpt.chars().count() >= 80)
+                .or_else(|| scores.first())?;
             let aggregate = best.0
                 + scores
                     .iter()

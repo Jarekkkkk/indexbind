@@ -164,15 +164,15 @@ pub fn chunk_document(doc_id: &str, content: &str, options: &ChunkingOptions) ->
 
 fn split_blocks(content: &str) -> Vec<Block> {
     let mut blocks = Vec::new();
-    let mut heading_path: Vec<String> = Vec::new();
+    let mut heading_path: Vec<(usize, String)> = Vec::new();
     let mut current = Vec::new();
 
-    let flush = |blocks: &mut Vec<Block>, current: &mut Vec<String>, heading_path: &[String]| {
+    let flush = |blocks: &mut Vec<Block>, current: &mut Vec<String>, heading_path: &[(usize, String)]| {
         let text = current.join("\n").trim().to_string();
         if !text.is_empty() {
             blocks.push(Block {
                 text,
-                heading_path: heading_path.to_vec(),
+                heading_path: heading_path.iter().map(|(_, h)| h.clone()).collect(),
             });
         }
         current.clear();
@@ -181,8 +181,8 @@ fn split_blocks(content: &str) -> Vec<Block> {
     for line in content.lines() {
         if let Some((level, heading)) = parse_heading(line) {
             flush(&mut blocks, &mut current, &heading_path);
-            heading_path.truncate(level.saturating_sub(1));
-            heading_path.push(heading.to_string());
+            heading_path.retain(|(l, _)| *l < level);
+            heading_path.push((level, heading.to_string()));
             continue;
         }
         if line.trim().is_empty() && !current.is_empty() {
@@ -249,5 +249,14 @@ mod tests {
         assert_eq!(chunks.len(), 2);
         assert_eq!(chunks[0].token_count, 5);
         assert_eq!(chunks[1].token_count, 2);
+    }
+
+    #[test]
+    fn heading_path_replaces_sibling_h2_without_h1() {
+        let input = "## Section A\ncontent A\n\n## Section B\ncontent B";
+        let chunks = chunk_document("doc-1", input, &ChunkingOptions::default());
+        assert_eq!(chunks.len(), 2);
+        assert_eq!(chunks[0].heading_path, vec!["Section A"]);
+        assert_eq!(chunks[1].heading_path, vec!["Section B"]);
     }
 }
